@@ -154,6 +154,8 @@
 
 #include <deque>
 
+namespace textsearch {
+
 void LogMessage(const char *format, ...) {
     va_list ap;
     va_start(ap, format);
@@ -1214,3 +1216,4 @@ void AhoCorasickSearch::printInfo() {
     printInfoEx(0);
 }
 
+} // namespace

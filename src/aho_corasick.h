@@ -49,8 +49,11 @@ k**
 #include <set>
 #include <algorithm>
 
-#include "uppercase_iterator.h"
+#ifndef NO_BOOST
+#include <boost/any.hpp>
+#endif
 
+#include "uppercase_iterator.h"
 
 // forcing inlining of _bnfa_get_next_state_csparse_nfa is key to performance
 #ifdef _MSC_VER
@@ -68,13 +71,20 @@ k**
 // define this to have more than 16 millions states
 #define BNFA_STATE_64BITS
 
+namespace textsearch {
+
 
 /*
 *   Aho-Corasick State Machine Struct
 */
 class AhoCorasickSearch {
 public:
-    typedef int(*match_function_ptr_t)(void * id, int index, const void *data);
+#ifndef NO_BOOST
+    typedef boost::any any_t;
+#else
+    typedef const void* any_t;
+#endif
+    typedef int(*match_function_ptr_t)(any_t pattern_userdata, int index, any_t search_userdata);
 #ifdef BNFA_STATE_64BITS
     typedef uint64_t bnfa_state_t;
     typedef uint_least64_t  bnfa_state_index_t;
@@ -110,7 +120,7 @@ public:
         RAIterator patBegin,
         RAIterator patEnd,
         bool nocase,
-        void * userdata
+        any_t userdata
         );
 
     int compile();
@@ -118,7 +128,7 @@ public:
     template<typename RAIterator>
     unsigned search(RAIterator begin, RAIterator end,
         match_function_ptr_t match,
-        const void * sdata,
+        any_t userdata,
         bnfa_state_index_t sindex,
         bnfa_state_index_t* current_state);
 
@@ -190,7 +200,7 @@ private:
         unsigned char       * casepatrn;   /* case specific */
         unsigned              n;           /* pattern len */
         bool                  nocase;      /* nocase flag */
-        void* userdata;    /* ptr to users pattern data/info  */
+        any_t userdata;    /* ptr to users pattern data/info  */
 
     } bnfa_pattern_t;
 
@@ -247,9 +257,9 @@ private:
             bool check=false
             ) : userfunc_(userfunc), begin_(begin),check_(check) {}
         int operator() (
-            void * id, 
+            any_t pattern_userdata, 
             int index, 
-            const void *data, 
+            any_t search_userdata, 
             bnfa_pattern_t* pattern
             )
         {
@@ -261,11 +271,11 @@ private:
                         begin_ +index
                         )
                     )
-                    return userfunc_(id, index, data);
+                    return userfunc_(pattern_userdata, index, search_userdata);
                 else
                     return 0;
             }
-            return userfunc_(id, index, data);
+            return userfunc_(pattern_userdata, index, search_userdata);
         }
     private:
         match_function_ptr_t userfunc_;
@@ -322,7 +332,7 @@ private:
     int _add_queue(bnfa_match_node_t * p, int pos);
 
     template <typename RAIteratorUnderlying,typename RAIterator>
-    unsigned _process_queue(match_function_functor_check<RAIteratorUnderlying> functor, const void *data, RAIterator begin);
+    unsigned _process_queue(match_function_functor_check<RAIteratorUnderlying> functor, any_t data, RAIterator begin);
 
     int 
     _bnfa_list_put_next_state(
@@ -345,12 +355,12 @@ private:
     template <typename RAIteratorUnderlying,typename RAIterator>
     unsigned _bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator end,
         match_function_functor_check<RAIteratorUnderlying> match_functor,
-        const void *data, bnfa_state_index_t sindex, bnfa_state_index_t *current_state);
+        any_t data, bnfa_state_index_t sindex, bnfa_state_index_t *current_state);
     
     template <typename RAIteratorUnderlying, typename RAIterator>
     unsigned _bnfa_search_csparse_nfa_case(RAIterator begin, RAIterator end,
         match_function_functor_check<RAIteratorUnderlying> match_functor,
-        const void *data, bnfa_state_index_t sindex, bnfa_state_index_t *current_state);
+        any_t data, bnfa_state_index_t sindex, bnfa_state_index_t *current_state);
     
     static size_t _bnfa_conv_node_to_full(bnfa_trans_node_t* t, bnfa_state_t * full);
     
@@ -456,7 +466,7 @@ template<typename RAIterator>
 unsigned
 AhoCorasickSearch::search(RAIterator begin, RAIterator end,
     match_function_ptr_t Match,
-    const void *data, bnfa_state_index_t sindex, bnfa_state_index_t* current_state)
+    any_t userdata, bnfa_state_index_t sindex, bnfa_state_index_t* current_state)
 {
     int ret = 0;
 
@@ -475,7 +485,7 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
                 itBegin, 
                 itEnd, 
                 match_function_functor_check<RAIterator>(Match,begin,true),
-                data, 
+                userdata, 
                 sindex, 
                 current_state
                 );
@@ -486,7 +496,7 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
                 itBegin, 
                 itEnd, 
                 match_function_functor_check<RAIterator>(Match,begin, true),
-                data,
+                userdata,
                 sindex, 
                 current_state
                 );
@@ -498,7 +508,7 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
             begin, 
             end, 
             match_function_functor_check<RAIterator>(Match, begin,false),
-            data, 
+            userdata, 
             sindex, 
             current_state
             );
@@ -511,7 +521,7 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
             itBegin, 
             itEnd, 
             match_function_functor_check<RAIterator>(Match, begin, false),
-            data, 
+            userdata, 
             sindex, 
             current_state
             );
@@ -523,7 +533,7 @@ template<typename RAIteratorUnderlying,typename RAIterator>
 unsigned
 AhoCorasickSearch::_bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator Tend,
     match_function_functor_check<RAIteratorUnderlying> match_functor,
-    const void *data, bnfa_state_index_t sindex, bnfa_state_index_t *current_state)
+    any_t userdata, bnfa_state_index_t sindex, bnfa_state_index_t *current_state)
 {
     bnfa_match_node_t  * mlist;
     RAIterator T = begin;
@@ -562,7 +572,7 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator Tend,
                 nfound++;
                 if (_add_queue(mlist, index))
                 {
-                    if (_process_queue(match_functor, data,begin))
+                    if (_process_queue(match_functor, userdata,begin))
                     {
                         *current_state = sindex;
                         return 1;
@@ -573,7 +583,7 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator Tend,
     }
     *current_state = sindex;
 
-    return _process_queue(match_functor, data, begin);
+    return _process_queue(match_functor, userdata, begin);
 }
 
 
@@ -639,7 +649,7 @@ template<typename RAIteratorUnderlying, typename RAIterator>
 unsigned
 AhoCorasickSearch::_bnfa_search_csparse_nfa_case(RAIterator begin, RAIterator Tend,
     match_function_functor_check<RAIteratorUnderlying> match_functor,
-    const void *data, bnfa_state_index_t sindex, bnfa_state_index_t *current_state)
+    any_t userdata, bnfa_state_index_t sindex, bnfa_state_index_t *current_state)
 {
     bnfa_match_node_t  * mlist;
     RAIterator T = begin;
@@ -679,7 +689,7 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_case(RAIterator begin, RAIterator Te
                 * since that will be covered by the rule tree itself.  Each tree
                 * might have both case sensitive & case insensitive patterns.
                 */
-                res = match_functor(patrn->userdata, index, data,patrn);
+                res = match_functor(patrn->userdata, index, userdata,patrn);
                 if (res > 0)
                 {
                     *current_state = sindex;
@@ -703,7 +713,7 @@ template<typename RAIterator>
 int
 AhoCorasickSearch::addPattern(
     RAIterator patBegin, RAIterator patEnd, bool nocase,
-    void * userdata)
+    any_t userdata)
 {
     bnfa_pattern_t * plist;
     if (patEnd <= patBegin || (patEnd - patBegin > UINT_MAX) )
@@ -736,7 +746,7 @@ AhoCorasickSearch::addPattern(
 
 template <typename RAIteratorUnderlying,typename RAIterator>
 unsigned
-AhoCorasickSearch::_process_queue(match_function_functor_check<RAIteratorUnderlying> functor, const void *data, RAIterator begin)
+AhoCorasickSearch::_process_queue(match_function_functor_check<RAIteratorUnderlying> functor, any_t userdata, RAIterator begin)
 {
     bnfa_match_node_t  * mlist;
     bnfa_pattern_t     * patrn;
@@ -749,7 +759,7 @@ AhoCorasickSearch::_process_queue(match_function_functor_check<RAIteratorUnderly
         {
             patrn = mlist->data;
             /*process a pattern -  case is handled by otn processing */
-            res = functor(patrn->userdata, it->pos, data,patrn);
+            res = functor(patrn->userdata, it->pos, userdata,patrn);
             if (res > 0)
             {    /* terminate matching */
                 match_queue.clear();
@@ -835,4 +845,5 @@ AhoCorasickSearch::_bnfa_get_next_state_csparse_nfa(
     }
 }
 
+}
 #endif
