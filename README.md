@@ -49,3 +49,11 @@ int main() {
 ```
 
 See the source files under `src/` for additional details and advanced usage.
+
+## Visual Studio Code
+
+This repository includes tasks for building and debugging the example
+program. Run `Ctrl+Shift+B` to compile it or start the **Debug Example**
+configuration to launch it under the debugger. A similar **Debug test_basic**
+configuration and `build test_basic` task are provided for debugging the unit
+test.
