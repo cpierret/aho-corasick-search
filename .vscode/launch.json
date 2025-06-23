@@ -1,0 +1,33 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Example",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/example",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "preLaunchTask": "build example",
+            "MIMode": "gdb",
+            "miDebuggerPath": "gdb",
+            "externalConsole": false
+        },
+        {
+            "name": "Debug test_basic",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/test_basic",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "preLaunchTask": "build test_basic",
+            "MIMode": "gdb",
+            "miDebuggerPath": "gdb",
+            "externalConsole": false
+        }
+    ]
+}

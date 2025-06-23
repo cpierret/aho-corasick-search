@@ -1,0 +1,42 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build example",
+            "type": "shell",
+            "command": "g++",
+            "args": [
+                "-std=c++17",
+                "-g",
+                "-Isrc",
+                "examples/example.cpp",
+                "src/aho_corasick.cc",
+                "-o",
+                "example"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "build test_basic",
+            "type": "shell",
+            "command": "g++",
+            "args": [
+                "-std=c++17",
+                "-g",
+                "-Isrc",
+                "tests/test_basic.cpp",
+                "src/aho_corasick.cc",
+                "-o",
+                "test_basic"
+            ],
+            "group": {
+                "kind": "build"
+            },
+            "problemMatcher": ["$gcc"]
+        }
+    ]
+}
