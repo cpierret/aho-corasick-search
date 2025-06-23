@@ -6,25 +6,18 @@ The code is released under the terms of the **GNU General Public License version
 
 ## Building
 
-All sources are located under the `src/` directory. To build your own program that links against the library you need a C++17-capable compiler. The example below compiles `example.cpp` together with the library sources:
+All sources are located under the `src/` directory. To build your own program that links against the library you need a C++17-capable compiler. The example below compiles `examples/example.cpp` together with the library sources:
 
 ```sh
-g++ -std=c++17 -O2 example.cpp src/aho_corasick.cc -o example
-```
-
-If you do not want to use the small Boost dependency (`boost::any`), define `NO_BOOST` during compilation:
-
-```sh
-g++ -std=c++17 -O2 -DNO_BOOST example.cpp src/aho_corasick.cc -o example
+g++ -std=c++17 -O2 examples/example.cpp src/aho_corasick.cc -o example
 ```
 
 The project also includes a cross‑platform [CMake](https://cmake.org/) build
-system. It can be used to build the library as well as optional examples and
-tests:
+system. It can be used to build the library and run the tests:
 
 ```sh
 mkdir build && cd build
-cmake .. -DBUILD_EXAMPLES=ON -DBUILD_TESTS=ON
+cmake .. -DENABLE_ASAN=ON -DBUILD_TESTS=ON
 cmake --build .
 ctest
 ```
