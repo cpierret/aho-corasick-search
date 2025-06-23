@@ -8,6 +8,9 @@ add_library(aho_corasick_search
     src/aho_corasick.cc
 )
 
+# Require C++17 for the library and propagate to dependents
+target_compile_features(aho_corasick_search PUBLIC cxx_std_17)
+
 # Public include directory
 target_include_directories(aho_corasick_search
     PUBLIC
