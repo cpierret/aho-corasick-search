@@ -86,7 +86,7 @@
 ** instruction pipelining.  Aren't we all.  To this end, the number of
 ** patterns, length of search text, and cpu cache L1,L2,L3 all affect
 ** performance. The relative performance of the sparse and full format NFA and
-** DFA varies as you vary the pattern charactersitics,and search text length,
+** DFA varies as you vary the pattern characteristics,and search text length,
 ** but strong performance trends are present and stable.
 **
 **
