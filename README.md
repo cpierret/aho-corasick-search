@@ -6,7 +6,7 @@ The code is released under the terms of the **GNU General Public License version
 
 ## Building
 
-All sources are located under the `src/` directory. To build your own program that links against the library you only need a C++11 compiler. The example below compiles `example.cpp` together with the library sources:
+All sources are located under the `src/` directory. To build your own program that links against the library you need a C++17-capable compiler. The example below compiles `example.cpp` together with the library sources:
 
 ```sh
 g++ -std=c++17 -O2 example.cpp src/aho_corasick.cc -o example
