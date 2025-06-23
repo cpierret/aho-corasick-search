@@ -1,2 +1,47 @@
-# aho-corasick-search
-Aho-Corasick multi-string search algorithm
+# Aho-Corasick Search
+
+This library implements the [Aho–Corasick](https://en.wikipedia.org/wiki/Aho%E2%80%93Corasick_algorithm) algorithm for multi-pattern text searching. It aims to provide a compact and fast search engine using a sparse NFA implementation written in modern C++.
+
+The code is released under the terms of the **GNU General Public License version 2 (GPLv2)**. See `LICENSE` for the complete text.
+
+## Building
+
+All sources are located under the `src/` directory. To build your own program that links against the library you only need a C++11 compiler. The example below compiles `example.cpp` together with the library sources:
+
+```sh
+g++ -std=c++11 -O2 example.cpp src/aho_corasick.cc -o example
+```
+
+If you do not want to use the small Boost dependency (`boost::any`), define `NO_BOOST` during compilation:
+
+```sh
+g++ -std=c++11 -O2 -DNO_BOOST example.cpp src/aho_corasick.cc -o example
+```
+
+## Usage example
+
+```cpp
+#include "src/aho_corasick.h"
+#include <iostream>
+#include <string>
+
+using namespace textsearch;
+
+int print_match(AhoCorasickSearch::any_t, int index, AhoCorasickSearch::any_t) {
+    std::cout << "matched pattern " << index << std::endl;
+    return 0;
+}
+
+int main() {
+    AhoCorasickSearch ac;
+
+    const std::string pattern = "needle";
+    ac.addPattern(pattern.begin(), pattern.end(), false, nullptr);
+    ac.compile();
+
+    const std::string text = "haystack needle haystack";
+    ac.search(text.begin(), text.end(), print_match, nullptr, 0, nullptr);
+}
+```
+
+See the source files under `src/` for additional details and advanced usage.
