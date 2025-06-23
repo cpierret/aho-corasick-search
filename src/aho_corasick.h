@@ -47,10 +47,8 @@
 #include <stdint.h>
 #include <set>
 #include <algorithm>
+#include <any>
 
-#ifndef NO_BOOST
-#include <boost/any.hpp>
-#endif
 
 #include "uppercase_iterator.h"
 
@@ -78,11 +76,7 @@ namespace textsearch {
 */
 class AhoCorasickSearch {
 public:
-#ifndef NO_BOOST
-    typedef boost::any any_t;
-#else
-    typedef const void* any_t;
-#endif
+    using any_t = std::any;
     typedef int(*match_function_ptr_t)(any_t pattern_userdata, int index, any_t search_userdata);
 #ifdef BNFA_STATE_64BITS
     typedef uint64_t bnfa_state_t;
