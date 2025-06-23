@@ -1,10 +1,17 @@
 #pragma once
 #include <iterator>
 
-template <typename functor_type,typename RandomAccessIterator,typename val_type = typename std::iterator_traits<RandomAccessIterator>::value_type,typename d_type = typename std::iterator_traits<RandomAccessIterator>::difference_type >
-class functor_iterator : public std::iterator<std::random_access_iterator_tag, val_type> {
-	public:
-		val_type operator *() const { return f_(*i_); }
+template <typename functor_type, typename RandomAccessIterator,
+          typename ValueType = typename std::iterator_traits<RandomAccessIterator>::value_type,
+          typename DifferenceType = typename std::iterator_traits<RandomAccessIterator>::difference_type>
+class functor_iterator {
+        public:
+                using iterator_category = std::random_access_iterator_tag;
+                using value_type        = ValueType;
+                using difference_type   = DifferenceType;
+                using pointer           = value_type*;
+                using reference         = value_type;
+                value_type operator *() const { return f_(*i_); }
 		const functor_iterator &operator ++() { ++i_; return *this; }
 		const functor_iterator &operator --() { --i_; return *this; }
 		functor_iterator operator ++(int) {
@@ -21,21 +28,21 @@ class functor_iterator : public std::iterator<std::random_access_iterator_tag, v
 		bool operator  <=(const functor_iterator &other) const { return i_ <= other.i_; }
 		bool operator  >=(const functor_iterator &other) const { return i_ >= other.i_; }
 
-		functor_iterator operator +(const d_type &add) const {
+                functor_iterator operator +(const difference_type &add) const {
 			functor_iterator copy(*this);
 			copy.i_ = i_ + add;
 			return copy;
 		}
-		functor_iterator & operator +=(const d_type &add) {
+                functor_iterator & operator +=(const difference_type &add) {
 			i_ = i_ + add;
 			return *this;
 		}
-		functor_iterator operator -(const d_type &add) const {
+                functor_iterator operator -(const difference_type &add) const {
 			functor_iterator copy(*this);
 			copy.i_ = i_ - add;
 			return copy;
 		}
-		functor_iterator & operator -=(const d_type &add) {
+                functor_iterator & operator -=(const difference_type &add) {
 			i_ = i_ - add;
 			return *this;
 		}
