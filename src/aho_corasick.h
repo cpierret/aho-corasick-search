@@ -142,46 +142,46 @@ private:
     */
 #ifdef BNFA_STATE_64BITS
 
-    static const bnfa_state_t BNFA_SPARSE_MAX_STATE = 0x00ffffffffffffff;
-    static const unsigned BNFA_SPARSE_COUNT_SHIFT = 56;
-    static const unsigned BNFA_SPARSE_VALUE_SHIFT = 56;
+    static constexpr bnfa_state_t BNFA_SPARSE_MAX_STATE = 0x00ffffffffffffff;
+    static constexpr unsigned BNFA_SPARSE_COUNT_SHIFT = 56;
+    static constexpr unsigned BNFA_SPARSE_VALUE_SHIFT = 56;
 
-    static const bnfa_state_t BNFA_SPARSE_MATCH_BIT = 0x8000000000000000;
-    static const bnfa_state_t BNFA_SPARSE_FULL_BIT = 0x4000000000000000;
-    static const bnfa_state_t BNFA_SPARSE_COUNT_BITS = 0x3f00000000000000;
-    static const unsigned BNFA_SPARSE_MAX_ROW_TRANSITIONS = 0x3f;
-    static const bnfa_state_t BNFA_SPARSE_CONTROL_BITS = 0xff00000000000000; // control Word
-    static const bnfa_state_t BNFA_SPARSE_CHAR_BITS = 0xff00000000000000; // next words
+    static constexpr bnfa_state_t BNFA_SPARSE_MATCH_BIT = 0x8000000000000000;
+    static constexpr bnfa_state_t BNFA_SPARSE_FULL_BIT = 0x4000000000000000;
+    static constexpr bnfa_state_t BNFA_SPARSE_COUNT_BITS = 0x3f00000000000000;
+    static constexpr unsigned BNFA_SPARSE_MAX_ROW_TRANSITIONS = 0x3f;
+    static constexpr bnfa_state_t BNFA_SPARSE_CONTROL_BITS = 0xff00000000000000; // control Word
+    static constexpr bnfa_state_t BNFA_SPARSE_CHAR_BITS = 0xff00000000000000; // next words
     /*
     * Used to initialize last state, states are limited to 56 bits
     * so this will not conflict.
     */
-    static const bnfa_state_t LAST_STATE_INIT = 0xffffffffffffffff;
-    static const bnfa_state_t BNFA_FAIL_STATE = 0xffffffffffffffff;
+    static constexpr bnfa_state_t LAST_STATE_INIT = 0xffffffffffffffff;
+    static constexpr bnfa_state_t BNFA_FAIL_STATE = 0xffffffffffffffff;
 
 #else
 
-    static const bnfa_state_index_t BNFA_SPARSE_MAX_STATE = 0x00ffffff;
-    static const unsigned BNFA_SPARSE_COUNT_SHIFT = 24;
-    static const unsigned BNFA_SPARSE_VALUE_SHIFT = 24;
+    static constexpr bnfa_state_index_t BNFA_SPARSE_MAX_STATE = 0x00ffffff;
+    static constexpr unsigned BNFA_SPARSE_COUNT_SHIFT = 24;
+    static constexpr unsigned BNFA_SPARSE_VALUE_SHIFT = 24;
 
-    static const bnfa_state_index_t BNFA_SPARSE_MATCH_BIT = 0x80000000;
-    static const bnfa_state_index_t BNFA_SPARSE_FULL_BIT = 0x40000000;
-    static const bnfa_state_index_t BNFA_SPARSE_COUNT_BITS = 0x3f000000;
-    static const unsigned BNFA_SPARSE_MAX_ROW_TRANSITIONS = 0x3f;
-    static const bnfa_state_index_t BNFA_SPARSE_CONTROL_BITS = 0xff000000; // control Word
-    static const bnfa_state_index_t BNFA_SPARSE_CHAR_BITS = 0xff000000; // next words
+    static constexpr bnfa_state_index_t BNFA_SPARSE_MATCH_BIT = 0x80000000;
+    static constexpr bnfa_state_index_t BNFA_SPARSE_FULL_BIT = 0x40000000;
+    static constexpr bnfa_state_index_t BNFA_SPARSE_COUNT_BITS = 0x3f000000;
+    static constexpr unsigned BNFA_SPARSE_MAX_ROW_TRANSITIONS = 0x3f;
+    static constexpr bnfa_state_index_t BNFA_SPARSE_CONTROL_BITS = 0xff000000; // control Word
+    static constexpr bnfa_state_index_t BNFA_SPARSE_CHAR_BITS = 0xff000000; // next words
     /*
     * Used to initialize last state, states are limited to 0-16M
     * so this will not conflict.
     */
-    static const bnfa_state_index_t LAST_STATE_INIT = 0xffffffff;
-    static const bnfa_state_t BNFA_FAIL_STATE      = 0xffffffff;
+    static constexpr bnfa_state_index_t LAST_STATE_INIT = 0xffffffff;
+    static constexpr bnfa_state_t BNFA_FAIL_STATE      = 0xffffffff;
 
 #endif
 
-    static const unsigned BNFA_SPARSE_LINEAR_SEARCH_LIMIT = 6;
-    static const unsigned BNFA_MAX_ALPHABET_SIZE = 256;
+    static constexpr unsigned BNFA_SPARSE_LINEAR_SEARCH_LIMIT = 6;
+    static constexpr unsigned BNFA_MAX_ALPHABET_SIZE = 256;
 
  
     /*
