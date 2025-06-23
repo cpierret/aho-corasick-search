@@ -45,6 +45,7 @@
 
 #include <limits.h>
 #include <stdint.h>
+#include <cstddef>
 #include <set>
 #include <algorithm>
 #include <any>
@@ -337,7 +338,7 @@ private:
     bnfa_state_index_t 
         _bnfa_list_get_next_state(bnfa_state_index_t state, unsigned char input);
 
-    size_t _bnfa_list_conv_row_to_full(bnfa_state_index_t state, bnfa_state_t * full);
+    ptrdiff_t _bnfa_list_conv_row_to_full(bnfa_state_index_t state, bnfa_state_t * full);
     int _bnfa_add_pattern_states(bnfa_pattern_t * p);
     int _bnfa_opt_nfa();
     int _bnfa_build_nfa();

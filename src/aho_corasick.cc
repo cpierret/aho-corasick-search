@@ -151,6 +151,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdarg.h>
+#include <cstddef>
 
 #include <deque>
 
@@ -295,7 +296,7 @@ int AhoCorasickSearch::_bnfa_list_free_table() {
 /*
 * Converts a single row of states from list format to a full format
 */
-size_t
+ptrdiff_t
 AhoCorasickSearch::_bnfa_list_conv_row_to_full(
     bnfa_state_index_t state,
     bnfa_state_t * full ) {
@@ -314,7 +315,7 @@ AhoCorasickSearch::_bnfa_list_conv_row_to_full(
         } else {
             memset(full, 0, sizeof(bnfa_state_t)*bnfaAlphabetSize);
         }
-        return bnfaAlphabetSize;
+        return static_cast<ptrdiff_t>(bnfaAlphabetSize);
     } else {
         int tcnt = 0;
 
@@ -331,7 +332,7 @@ AhoCorasickSearch::_bnfa_list_conv_row_to_full(
             tcnt++;
             t = t->next;
         }
-        return tcnt;
+        return static_cast<ptrdiff_t>(tcnt);
     }
 }
 
@@ -618,7 +619,10 @@ AhoCorasickSearch::_bnfa_conv_list_to_csparse_array()
 
         /* count transitions */
         nc = 0;
-        _bnfa_list_conv_row_to_full(k, full);
+        if (_bnfa_list_conv_row_to_full(k, full) < 0)
+        {
+            return -1;
+        }
         for (i = 0; i<bnfaAlphabetSize; i++)
         {
             state = fullGetTransitionState(full[i]);
@@ -689,7 +693,10 @@ AhoCorasickSearch::_bnfa_conv_list_to_csparse_array()
         ps_index++;  /* skip past state word */
 
         /* conver state 'k' to full format */
-        _bnfa_list_conv_row_to_full(k, full);
+        if (_bnfa_list_conv_row_to_full(k, full) < 0)
+        {
+            return -1;
+        }
 
         /* count transitions */
         nc = 0;
@@ -717,7 +724,10 @@ AhoCorasickSearch::_bnfa_conv_list_to_csparse_array()
             ps_index++;
 
             /* copy the transitions */
-            _bnfa_list_conv_row_to_full(k, &ps[ps_index]);
+            if (_bnfa_list_conv_row_to_full(k, &ps[ps_index]) < 0)
+            {
+                return -1;
+            }
 
             ps_index += BNFA_MAX_ALPHABET_SIZE;  /* add in 256 transitions */
 
