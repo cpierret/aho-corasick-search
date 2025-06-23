@@ -353,7 +353,7 @@ AhoCorasickSearch::_bnfa_add_pattern_states(bnfa_pattern_t * p) {
     *  Match up pattern with existing states
     */
     for (; n > 0; pattern++, n--) {
-        if (bnfaCaseMode == BNFA_CASE)
+        if (bnfaCaseMode == bnfa_case::BNFA_CASE)
             next = _bnfa_list_get_next_state(state, *pattern);
         else
             next = _bnfa_list_get_next_state(state, toupper_functor(*pattern));
@@ -372,7 +372,7 @@ AhoCorasickSearch::_bnfa_add_pattern_states(bnfa_pattern_t * p) {
     {
         bnfaNumStates++;
 
-        if (bnfaCaseMode == BNFA_CASE)
+        if (bnfaCaseMode == bnfa_case::BNFA_CASE)
         {
             if (_bnfa_list_put_next_state(state, *pattern, bnfaNumStates) < 0)
                 return -1;
@@ -925,7 +925,7 @@ void AhoCorasickSearch::print()
 /*
 *  Create a new AC state machine
 */
-AhoCorasickSearch::AhoCorasickSearch(bnfa_enum_case_t flag)
+AhoCorasickSearch::AhoCorasickSearch(bnfa_case flag)
     :toupper_functor(toupper)
 {
     bnfaPatterns = 0;
@@ -942,7 +942,7 @@ AhoCorasickSearch::AhoCorasickSearch(bnfa_enum_case_t flag)
 
     bnfaPatternCnt = 0;
     bnfaOptimizeFailureStates = false;
-    bnfaCaseMode = BNFA_PER_PAT_CASE;
+    bnfaCaseMode = bnfa_case::BNFA_PER_PAT_CASE;
     bnfaFormat = BNFA_SPARSE;
     bnfaAlphabetSize = BNFA_MAX_ALPHABET_SIZE;
 
@@ -964,11 +964,11 @@ AhoCorasickSearch::setOptimizeFailureStates(bool flag)
 }
 
 void
-AhoCorasickSearch::setCase(bnfa_enum_case_t flag)
+AhoCorasickSearch::setCase(bnfa_case flag)
 {
-    if (flag == BNFA_PER_PAT_CASE) bnfaCaseMode = flag;
-    if (flag == BNFA_CASE) bnfaCaseMode = flag;
-    if (flag == BNFA_NOCASE) bnfaCaseMode = flag;
+    if (flag == bnfa_case::BNFA_PER_PAT_CASE) bnfaCaseMode = flag;
+    if (flag == bnfa_case::BNFA_CASE) bnfaCaseMode = flag;
+    if (flag == bnfa_case::BNFA_NOCASE) bnfaCaseMode = flag;
 }
 
 /*

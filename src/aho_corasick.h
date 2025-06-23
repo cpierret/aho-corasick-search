@@ -91,16 +91,16 @@ public:
     typedef uint32_t bnfa_state_t;
     typedef uint_least32_t bnfa_state_index_t;
 #endif
-    typedef enum {
+    enum class bnfa_case : int {
         BNFA_PER_PAT_CASE, // DEFAULT:case-sensitivity is specified per pattern
         BNFA_CASE,         // binary search (case sensitive), fastest mode
-        BNFA_NOCASE        // case-insensitive search 
-    } bnfa_enum_case_t;
-    
-    void setCase(bnfa_enum_case_t flag);
+        BNFA_NOCASE        // case-insensitive search
+    };
+
+    void setCase(bnfa_case flag);
 
 
-    explicit AhoCorasickSearch(bnfa_enum_case_t flag = BNFA_CASE);
+    explicit AhoCorasickSearch(bnfa_case flag = bnfa_case::BNFA_CASE);
     ~AhoCorasickSearch();
     
     void setOptimizeFailureStates(bool flag=true);
@@ -285,7 +285,7 @@ private:
     typedef struct bnfa_match_s bnfa_match_t;
 
     int                bnfaMethod;
-    int                bnfaCaseMode;
+    bnfa_case          bnfaCaseMode;
     int                bnfaFormat;
     unsigned           bnfaAlphabetSize;
     bool               bnfaOptimizeFailureStates;
@@ -474,7 +474,7 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
         sindex = *current_state;
     }
 
-    if (bnfaCaseMode == BNFA_PER_PAT_CASE)
+    if (bnfaCaseMode == bnfa_case::BNFA_PER_PAT_CASE)
     {
         functor_iterator<character_functor, RAIterator> itBegin(toupper_functor, begin);
         functor_iterator<character_functor, RAIterator> itEnd(toupper_functor, end);
@@ -501,7 +501,7 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
                 );
         }
     }
-    else if (bnfaCaseMode == BNFA_CASE)
+    else if (bnfaCaseMode == bnfa_case::BNFA_CASE)
     {
         ret = _bnfa_search_csparse_nfa_case(
             begin, 
