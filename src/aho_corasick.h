@@ -628,7 +628,7 @@ void AhoCorasickSearch::bnfa_free(T* p, size_t n, size_t& m)
             delete[] p;
         else
             delete p;
-        m -= n;
+        m -= n * sizeof(T);
     }
 }
 template <typename T>
@@ -638,7 +638,7 @@ void AhoCorasickSearch::bnfa_free(T* p, size_t& m)
     if (p)
     {
         delete p;
-        --m;
+        m -= sizeof(T);
     }
 }
 
