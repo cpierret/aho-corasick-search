@@ -912,7 +912,7 @@ void AhoCorasickSearch::print()
             LogMessage("---MatchList For State %d\n", k);
 
         for (mlist = MatchList[k];
-        mlist != NULL;
+        mlist != nullptr;
             mlist = mlist->next)
         {
             bnfa_pattern_t * pat;
@@ -1027,7 +1027,7 @@ AhoCorasickSearch::compile()
     unsigned          i;
 
     /* Count number of states */
-    for (plist = bnfaPatterns; plist != NULL; plist = plist->next)
+    for (plist = bnfaPatterns; plist != nullptr; plist = plist->next)
     {
         bnfaMaxStates += plist->n;
     }
@@ -1059,7 +1059,7 @@ AhoCorasickSearch::compile()
 
     /* Add each Pattern to the State Table - This forms a keyword trie using lists */
     bnfaNumStates = 0;
-    for (plist = bnfaPatterns; plist != NULL; plist = plist->next)
+    for (plist = bnfaPatterns; plist != nullptr; plist = plist->next)
     {
         _bnfa_add_pattern_states(plist);
     }
