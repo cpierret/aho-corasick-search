@@ -552,7 +552,7 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator Tend,
                 continue;
 
             mlist = MatchList[getCurrentState(transList[sindex])];
-            if (mlist)
+            while (mlist)
             {
                 int index;
                 bnfa_pattern_t* patrn = mlist->data;
@@ -570,6 +570,7 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator Tend,
                         return 1;
                     }
                 }
+                mlist = mlist->next;
             }
         }
     }
@@ -667,7 +668,7 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_case(RAIterator begin, RAIterator Te
             last_match_saved = last_match;
             last_match = sindex;
             mlist = MatchList[getCurrentState(transList[sindex])];
-            if(mlist)
+            while (mlist)
             {
                 int index;
                 patrn = mlist->data;
@@ -691,6 +692,7 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_case(RAIterator begin, RAIterator Te
                 {
                     last_match = last_match_saved;
                 }
+                mlist = mlist->next;
             }
         }
     }

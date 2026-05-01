@@ -1,16 +1,26 @@
 #include "aho_corasick.h"
+#include <algorithm>
 #include <any>
 #include <cassert>
 #include <string>
+#include <utility>
 #include <vector>
 
 using textsearch::AhoCorasickSearch;
 
 namespace {
 
+using IdentifiedMatch = std::pair<int, int>;
+
 int collect_match(AhoCorasickSearch::any_t, int index, AhoCorasickSearch::any_t userdata) {
     auto results = std::any_cast<std::vector<int>*>(userdata);
     results->push_back(index);
+    return 0;
+}
+
+int collect_identified_match(AhoCorasickSearch::any_t pattern_data, int index, AhoCorasickSearch::any_t userdata) {
+    auto results = std::any_cast<std::vector<IdentifiedMatch>*>(userdata);
+    results->push_back({std::any_cast<int>(pattern_data), index});
     return 0;
 }
 
@@ -24,6 +34,10 @@ int stop_after_first_match(AhoCorasickSearch::any_t, int index, AhoCorasickSearc
     auto results = std::any_cast<std::vector<int>*>(userdata);
     results->push_back(index);
     return 1;
+}
+
+bool has_match(const std::vector<IdentifiedMatch>& matches, const IdentifiedMatch& expected) {
+    return std::find(matches.begin(), matches.end(), expected) != matches.end();
 }
 
 void add_pattern(
@@ -133,6 +147,27 @@ int main() {
     assert(terminating_search.search(
                repeated_text.begin(), repeated_text.end(), stop_after_first_match, &matches, 0, &state) == 1);
     assert(matches.size() == 1);
+
+    AhoCorasickSearch overlapping_search;
+    add_pattern(overlapping_search, "he", false, 1);
+    add_pattern(overlapping_search, "she", false, 2);
+    add_pattern(overlapping_search, "hers", false, 3);
+    assert(overlapping_search.compile() == 0);
+
+    const std::string overlapping_text = "ushers";
+    std::vector<IdentifiedMatch> identified_matches;
+    state = 0;
+    overlapping_search.search(
+        overlapping_text.begin(),
+        overlapping_text.end(),
+        collect_identified_match,
+        &identified_matches,
+        0,
+        &state);
+    assert(identified_matches.size() == 3);
+    assert(has_match(identified_matches, {1, 2}));
+    assert(has_match(identified_matches, {2, 1}));
+    assert(has_match(identified_matches, {3, 2}));
 
     return 0;
 }
