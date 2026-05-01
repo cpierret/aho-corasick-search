@@ -61,6 +61,18 @@ int main() {
 
 See the source files under `src/` for additional details and advanced usage.
 
+## Streaming searches
+
+For searches split across multiple buffers, pass the same non-null
+`bnfa_state_index_t` state pointer to each `search()` call. A null state pointer
+is supported for single-buffer searches.
+
+In `BNFA_PER_PAT_CASE` mode, case-sensitive patterns that start in a previous
+buffer and end in the current buffer are not reported because the API only
+carries automaton state across calls, not the previous bytes required for exact
+case verification. Use `BNFA_CASE`, `BNFA_NOCASE`, or per-pattern `nocase=true`
+when cross-buffer matches are required.
+
 ## Visual Studio Code
 
 This repository includes tasks for building and debugging the example

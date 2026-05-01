@@ -130,6 +130,31 @@ int main() {
     streaming_search.search(second_chunk.begin(), second_chunk.end(), count_match, &count, 0, &state);
     assert(count == 1);
 
+    AhoCorasickSearch split_per_pattern_case_search(AhoCorasickSearch::bnfa_case::BNFA_PER_PAT_CASE);
+    std::vector<char> split_pattern = {'a', 'a', 'a', 'a', 'a', 'a'};
+    assert(split_per_pattern_case_search.addPattern(split_pattern.begin(), split_pattern.end(), false, nullptr) == 0);
+    assert(split_per_pattern_case_search.compile() == 0);
+
+    std::vector<char> split_first_chunk = {'a', 'a', 'a'};
+    std::vector<char> split_second_chunk = {'a', 'a', 'a'};
+    count = 0;
+    state = 0;
+    split_per_pattern_case_search.search(
+        split_first_chunk.begin(), split_first_chunk.end(), count_match, &count, 0, &state);
+    split_per_pattern_case_search.search(
+        split_second_chunk.begin(), split_second_chunk.end(), count_match, &count, 0, &state);
+    assert(count == 0);
+
+    AhoCorasickSearch split_per_pattern_nocase_search(AhoCorasickSearch::bnfa_case::BNFA_PER_PAT_CASE);
+    add_pattern(split_per_pattern_nocase_search, "Needle", true);
+    assert(split_per_pattern_nocase_search.compile() == 0);
+
+    count = 0;
+    state = 0;
+    split_per_pattern_nocase_search.search(first_chunk.begin(), first_chunk.end(), count_match, &count, 0, &state);
+    split_per_pattern_nocase_search.search(second_chunk.begin(), second_chunk.end(), count_match, &count, 0, &state);
+    assert(count == 1);
+
     AhoCorasickSearch optimized_search;
     optimized_search.setOptimizeFailureStates(true);
     add_pattern(optimized_search, "he");

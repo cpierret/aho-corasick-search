@@ -49,6 +49,7 @@
 #include <set>
 #include <algorithm>
 #include <any>
+#include <iterator>
 
 
 #include "uppercase_iterator.h"
@@ -118,7 +119,11 @@ public:
         );
 
     int compile();
-    
+
+    // current_state is optional for single-buffer searches. Pass the same
+    // non-null state pointer across calls to continue matching across buffers.
+    // In BNFA_PER_PAT_CASE, case-sensitive patterns that begin before the
+    // current buffer cannot be exact-case verified and are not reported.
     template<typename RAIterator>
     unsigned search(RAIterator begin, RAIterator end,
         match_function_ptr_t match,
@@ -248,21 +253,31 @@ private:
         match_function_functor_check(
             match_function_ptr_t userfunc, 
             RAIterator begin, 
+            RAIterator end,
             bool check=false
-            ) : userfunc_(userfunc), begin_(begin),check_(check) {}
+            ) : userfunc_(userfunc), begin_(begin), end_(end), check_(check) {}
         int operator() (
             any_t pattern_userdata, 
             int index, 
             any_t search_userdata, 
-            bnfa_pattern_t* pattern
+            bnfa_pattern_t* pattern,
+            bool starts_before_buffer=false
             )
         {
             if (check_ && !pattern->nocase)
             {
+                if (starts_before_buffer || index < 0)
+                    return 0;
+
+                RAIterator pattern_begin = begin_ + index;
+                using difference_type = typename std::iterator_traits<RAIterator>::difference_type;
+                if (end_ - pattern_begin < static_cast<difference_type>(pattern->n))
+                    return 0;
+
                 if (std::equal(
                         pattern->casepatrn,
                         pattern->casepatrn+pattern->n,
-                        begin_ +index
+                        pattern_begin
                         )
                     )
                     return userfunc_(pattern_userdata, index, search_userdata);
@@ -274,6 +289,7 @@ private:
     private:
         match_function_ptr_t userfunc_;
         RAIterator begin_;
+        RAIterator end_;
         bool check_;
     };
 
@@ -477,7 +493,7 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
             ret = _bnfa_search_csparse_nfa_case(
                 itBegin, 
                 itEnd, 
-                match_function_functor_check<RAIterator>(Match,begin,true),
+                match_function_functor_check<RAIterator>(Match, begin, end, true),
                 userdata, 
                 local_state,
                 &local_state
@@ -488,7 +504,7 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
             ret = _bnfa_search_csparse_nfa_q(
                 itBegin, 
                 itEnd, 
-                match_function_functor_check<RAIterator>(Match,begin, true),
+                match_function_functor_check<RAIterator>(Match, begin, end, true),
                 userdata,
                 local_state,
                 &local_state
@@ -500,7 +516,7 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
         ret = _bnfa_search_csparse_nfa_case(
             begin, 
             end, 
-            match_function_functor_check<RAIterator>(Match, begin,false),
+            match_function_functor_check<RAIterator>(Match, begin, end, false),
             userdata, 
             local_state,
             &local_state
@@ -513,7 +529,7 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
         ret = _bnfa_search_csparse_nfa_case(
             itBegin, 
             itEnd, 
-            match_function_functor_check<RAIterator>(Match, begin, false),
+            match_function_functor_check<RAIterator>(Match, begin, end, false),
             userdata, 
             local_state,
             &local_state
@@ -562,10 +578,16 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator Tend,
                 int index;
                 bnfa_pattern_t* patrn = mlist->data;
                 int offset = (T - begin);
-                if ( offset < patrn->n)
+                int raw_index = offset - static_cast<int>(patrn->n) + 1;
+                if (raw_index < 0 && !patrn->nocase)
+                {
+                    mlist = mlist->next;
+                    continue;
+                }
+                if (raw_index < 0)
                     index = 0;
                 else
-                    index = offset - patrn->n + 1;
+                    index = raw_index;
                 nfound++;
                 if (_add_queue(mlist, index))
                 {
@@ -678,16 +700,18 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_case(RAIterator begin, RAIterator Te
                 int index;
                 patrn = mlist->data;
                 int offset = static_cast<int>(T - begin);
-                if (offset < patrn->n)
+                int raw_index = offset - static_cast<int>(patrn->n) + 1;
+                bool starts_before_buffer = raw_index < 0;
+                if (starts_before_buffer)
                     index = 0;
                 else
-                    index = offset - patrn->n + 1;
+                    index = raw_index;
                 nfound++;
                 /* Don't do anything specific for case sensitive patterns and not,
                 * since that will be covered by the rule tree itself.  Each tree
                 * might have both case sensitive & case insensitive patterns.
                 */
-                res = match_functor(patrn->userdata, index, userdata,patrn);
+                res = match_functor(patrn->userdata, index, userdata, patrn, starts_before_buffer);
                 if (res > 0)
                 {
                     *current_state = sindex;
@@ -758,7 +782,7 @@ AhoCorasickSearch::_process_queue(match_function_functor_check<RAIteratorUnderly
         {
             patrn = mlist->data;
             /*process a pattern -  case is handled by otn processing */
-            res = functor(patrn->userdata, it->pos, userdata,patrn);
+            res = functor(patrn->userdata, it->pos, userdata, patrn);
             if (res > 0)
             {    /* terminate matching */
                 match_queue.clear();
