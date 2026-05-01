@@ -3,6 +3,7 @@ project(AhoCorasickSearch LANGUAGES CXX)
 
 option(BUILD_EXAMPLES "Build example binaries" OFF)
 option(BUILD_TESTS "Build tests" OFF)
+option(BUILD_PYTHON_EXTENSION "Build the native CPython extension" OFF)
 option(ENABLE_ASAN "Build with AddressSanitizer" OFF)
 option(ENABLE_COVERAGE "Build tests with code coverage instrumentation" OFF)
 
@@ -63,6 +64,40 @@ if(BUILD_EXAMPLES)
     enable_coverage_for(example)
 endif()
 
+if(BUILD_PYTHON_EXTENSION)
+    if(CMAKE_VERSION VERSION_LESS 3.15)
+        message(FATAL_ERROR "BUILD_PYTHON_EXTENSION requires CMake 3.15 or newer")
+    endif()
+
+    find_package(Python 3.10 COMPONENTS Interpreter Development.Module REQUIRED)
+
+    execute_process(
+        COMMAND ${Python_EXECUTABLE} -m nanobind --cmake_dir
+        OUTPUT_VARIABLE NANOBIND_CMAKE_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        RESULT_VARIABLE NANOBIND_CMAKE_DIR_RESULT
+    )
+    if(NOT NANOBIND_CMAKE_DIR_RESULT EQUAL 0)
+        message(FATAL_ERROR "BUILD_PYTHON_EXTENSION requires nanobind. Install it with: ${Python_EXECUTABLE} -m pip install nanobind")
+    endif()
+
+    list(APPEND CMAKE_PREFIX_PATH "${NANOBIND_CMAKE_DIR}")
+    find_package(nanobind CONFIG REQUIRED)
+
+    nanobind_add_module(aho_corasick_search_ext
+        NOMINSIZE
+        python/aho_corasick_search_ext.cpp
+    )
+    target_link_libraries(aho_corasick_search_ext PRIVATE aho_corasick_search)
+    target_compile_features(aho_corasick_search_ext PRIVATE cxx_std_17)
+    set_target_properties(aho_corasick_search_ext PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
+endif()
+
 if(BUILD_TESTS)
     enable_testing()
     add_executable(test_basic tests/test_basic.cpp)
@@ -93,6 +128,16 @@ if(BUILD_TESTS)
             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
             DEPENDS test_basic
             COMMENT "Running unit tests and generating gcov coverage reports"
+        )
+    endif()
+
+    if(BUILD_PYTHON_EXTENSION)
+        add_test(
+            NAME python_extension
+            COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_python_extension.py
+        )
+        set_tests_properties(python_extension PROPERTIES
+            ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:aho_corasick_search_ext>"
         )
     endif()
 endif()

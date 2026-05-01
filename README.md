@@ -33,6 +33,37 @@ cmake --build . --target coverage
 
 The generated `gcov` reports are written to `build-coverage/coverage/`.
 
+## Python extension
+
+The project can also build a native CPython extension with
+[nanobind](https://nanobind.readthedocs.io/). This is intended for benchmark
+integration where Python callback overhead would hide the C++ search cost.
+
+Install nanobind into the Python environment used by CMake, then enable the
+extension target:
+
+```sh
+python3 -m pip install nanobind
+cmake -S . -B build-python -DBUILD_PYTHON_EXTENSION=ON -DBUILD_TESTS=ON
+cmake --build build-python
+ctest --test-dir build-python --output-on-failure
+```
+
+The extension module is written to the CMake build directory. For ad hoc use:
+
+```sh
+PYTHONPATH=build-python python3 - <<'PY'
+import aho_corasick_search_ext
+
+ac = aho_corasick_search_ext.AhoCorasick(["needle", "hay"])
+print(ac.find_matches_as_indexes("haystack needle"))
+print(ac.count_matches("haystack needle"))
+PY
+```
+
+The Python API reports byte offsets. This is the fastest path and matches the
+ASCII benchmark data used by `ahocorasick_rs`.
+
 ## Usage example
 
 ```cpp
