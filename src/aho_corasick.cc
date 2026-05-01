@@ -559,7 +559,7 @@ AhoCorasickSearch::_bnfa_build_nfa()
                 px = bnfa_alloc(matchlist_memory, (bnfa_match_node_t*)0);
                 if (!px)
                 {
-                    return 0;
+                    return -1;
                 }
 
                 px->data = mlist->data;
@@ -991,7 +991,7 @@ AhoCorasickSearch::~AhoCorasickSearch()
     bnfa_pattern_t * patrn, *ipatrn;
     bnfa_match_node_t   * mlist, *ilist;
 
-    for (i = 0; i < bnfaNumStates; i++)
+    for (i = 0; bnfaMatchList && i < bnfaNumStates; i++)
     {
         /* free match list entries */
         mlist = bnfaMatchList[i];
@@ -1005,6 +1005,8 @@ AhoCorasickSearch::~AhoCorasickSearch()
         bnfaMatchList[i] = 0;
 
     }
+
+    _bnfa_list_free_table();
 
     /* Free patterns */
     patrn = bnfaPatterns;
@@ -1077,7 +1079,10 @@ AhoCorasickSearch::compile()
     bnfaNumStates = 0;
     for (plist = bnfaPatterns; plist != nullptr; plist = plist->next)
     {
-        _bnfa_add_pattern_states(plist);
+        if (_bnfa_add_pattern_states(plist))
+        {
+            return -1;
+        }
     }
     bnfaNumStates++; 
 
@@ -1089,19 +1094,20 @@ AhoCorasickSearch::compile()
     /* ReAlloc a smaller MatchList table -  only need NumStates  */
     tmpMatchList = bnfaMatchList;
 
-    bnfaMatchList = bnfa_alloc(
+    bnfa_match_node_t** resizedMatchList = bnfa_alloc(
         bnfaNumStates,
         matchlist_memory,
         (bnfa_match_node_t**)0
         );
-    if (!bnfaMatchList)
+    if (!resizedMatchList)
     {
         return -1;
     }
 
-    memcpy(bnfaMatchList, tmpMatchList, sizeof(bnfa_match_node_t**) * bnfaNumStates);
+    memcpy(resizedMatchList, tmpMatchList, sizeof(bnfa_match_node_t**) * bnfaNumStates);
 
     bnfa_free(tmpMatchList, bnfaMaxStates, matchlist_memory);
+    bnfaMatchList = resizedMatchList;
 
     /* Alloc a failure state table -  only need NumStates */
     bnfaFailState = bnfa_alloc(bnfaNumStates, failstate_memory, (bnfa_state_index_t*)0);
