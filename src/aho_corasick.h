@@ -294,11 +294,11 @@ private:
     unsigned           bnfaMatchStates;
 
     typedef struct bnfa_trans_table {
-        bnfa_state_t* states;
-        bnfa_trans_node_t* transitions[]; // transitions[0] was states in union
+        bnfa_state_t* states;                // zero state transitions
+        bnfa_trans_node_t** transitions;     // per state transition lists
     } bnfa_trans_table_t;
 
-    bnfa_trans_table_t  * bnfaTransTable;
+    bnfa_trans_table_t* bnfaTransTable;
 
     bnfa_state_t       ** bnfaNextState;
     bnfa_match_node_t  ** bnfaMatchList;

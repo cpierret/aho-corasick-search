@@ -283,9 +283,8 @@ int AhoCorasickSearch::_bnfa_list_free_table() {
     }
 
     if (bnfaTransTable) {
-        free(bnfaTransTable);
-        list_memory -= sizeof(bnfa_trans_table_t) +
-                       (bnfaMaxStates - 1) * sizeof(void*);
+        bnfa_free(bnfaTransTable->transitions, bnfaMaxStates, list_memory);
+        bnfa_free(bnfaTransTable, 1, list_memory);
         bnfaTransTable = 0;
     }
 
@@ -1046,16 +1045,19 @@ AhoCorasickSearch::compile()
     bnfaMaxStates++; /* one extra */
 
     /* Alloc a List based State Transition table */
-    /* C variable struct size idiom */
-    bnfaTransTable = reinterpret_cast<bnfa_trans_table_t*>(
-        calloc(1, sizeof(bnfa_trans_table_t) +
-               (bnfaMaxStates - 1) * sizeof(void*)));
+    bnfaTransTable = bnfa_alloc(1, list_memory, (bnfa_trans_table_t*)0);
     if (!bnfaTransTable)
     {
         return -1;
     }
-    list_memory += sizeof(bnfa_trans_table_t) +
-                   (bnfaMaxStates - 1) * sizeof(void*);
+    bnfaTransTable->states = nullptr;
+    bnfaTransTable->transitions = bnfa_alloc(bnfaMaxStates, list_memory, (bnfa_trans_node_t**)0);
+    if (!bnfaTransTable->transitions)
+    {
+        bnfa_free(bnfaTransTable, 1, list_memory);
+        bnfaTransTable = nullptr;
+        return -1;
+    }
 
     /*
     ** Alloc a MatchList table -
