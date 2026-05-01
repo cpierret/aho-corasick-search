@@ -9,7 +9,7 @@ The code is released under the terms of the **GNU General Public License version
 All sources are located under the `src/` directory. To build your own program that links against the library you need a C++17-capable compiler. The example below compiles `examples/example.cpp` together with the library sources:
 
 ```sh
-g++ -std=c++17 -O2 examples/example.cpp src/aho_corasick.cc -o example
+g++ -std=c++17 -O2 -Isrc examples/example.cpp src/aho_corasick.cc -o example
 ```
 
 The project also includes a cross‑platform [CMake](https://cmake.org/) build
@@ -33,10 +33,47 @@ cmake --build . --target coverage
 
 The generated `gcov` reports are written to `build-coverage/coverage/`.
 
+To generate API documentation, install Doxygen and build the `docs` target:
+
+```sh
+cmake -S . -B build -DBUILD_DOCS=ON
+cmake --build build --target docs
+```
+
+The generated HTML documentation is written to `docs/api/html/`.
+
+## Public API
+
+Include `aho_corasick.h` and use the `textsearch::AhoCorasickSearch` class.
+
+Typical lifecycle:
+
+1. Construct `AhoCorasickSearch`, optionally selecting a case mode.
+2. Add all patterns with `addPattern()`.
+3. Call `compile()`.
+4. Call `search()` with a callback that receives each match.
+
+Case modes:
+
+- `BNFA_CASE`: case-sensitive matching.
+- `BNFA_NOCASE`: case-insensitive matching for all patterns.
+- `BNFA_PER_PAT_CASE`: each pattern decides case handling through the
+  `nocase` argument passed to `addPattern()`.
+
+The match callback receives the pattern userdata, the zero-based match start
+index in the current search buffer, and the search userdata. Return a positive
+value from the callback to stop searching early; return `0` to keep scanning.
+Use callback side effects as the authoritative match-reporting mechanism.
+
+`search()` accepts random-access iterators over `char` or `unsigned char`
+compatible data. For single-buffer searches, pass `nullptr` for
+`current_state`. For streaming searches, keep a `bnfa_state_index_t` initialized
+to `0` and pass its address to each call.
+
 ## Usage example
 
 ```cpp
-#include "src/aho_corasick.h"
+#include "aho_corasick.h"
 #include <iostream>
 #include <string>
 
@@ -80,3 +117,8 @@ program. Run `Ctrl+Shift+B` to compile it or start the **Debug Example**
 configuration to launch it under the debugger. A similar **Debug test_basic**
 configuration and `build test_basic` task are provided for debugging the unit
 test.
+
+## Contributing
+
+See `CONTRIBUTING.md` for build, test, documentation, style, and licensing
+guidelines.

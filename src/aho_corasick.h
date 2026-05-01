@@ -76,43 +76,81 @@
 namespace textsearch {
 
 
-/*
-*   Aho-Corasick State Machine Struct
-*/
+/**
+ * @brief Sparse NFA based Aho-Corasick multi-pattern search engine.
+ *
+ * Add all patterns, compile the automaton, then search one or more buffers.
+ * The class is not copyable. It owns the compiled automaton and releases all
+ * allocated storage in the destructor.
+ */
 class AhoCorasickSearch {
 public:
+    /// Type-erased data passed through pattern registration and search callbacks.
     using any_t = std::any;
+
+    /**
+     * @brief Match callback signature.
+     *
+     * @param pattern_userdata Userdata supplied when the matching pattern was added.
+     * @param index Zero-based start offset of the match in the current search buffer.
+     * @param search_userdata Userdata supplied to search().
+     * @return Return a positive value to stop searching early; return 0 to continue.
+     */
     typedef int(*match_function_ptr_t)(any_t pattern_userdata, int index, any_t search_userdata);
 #ifdef BNFA_STATE_64BITS
+    /// Packed automaton storage word.
     typedef uint64_t bnfa_state_t;
+    /// Index into the packed automaton state storage.
     typedef uint_least64_t  bnfa_state_index_t;
 #else
+    /// Packed automaton storage word.
     typedef uint32_t bnfa_state_t;
+    /// Index into the packed automaton state storage.
     typedef uint_least32_t bnfa_state_index_t;
 #endif
+    /// Controls how pattern and input case are handled.
     enum class bnfa_case : int {
-        BNFA_PER_PAT_CASE, // DEFAULT:case-sensitivity is specified per pattern
-        BNFA_CASE,         // binary search (case sensitive), fastest mode
-        BNFA_NOCASE        // case-insensitive search
+        BNFA_PER_PAT_CASE, ///< Case sensitivity is specified per pattern.
+        BNFA_CASE,         ///< Case-sensitive binary matching.
+        BNFA_NOCASE        ///< Case-insensitive matching for all patterns.
     };
 
+    /**
+     * @brief Set the case handling mode.
+     *
+     * Set this before adding patterns and compiling the automaton. Changing the
+     * case mode after compile() is not supported.
+     */
     void setCase(bnfa_case flag);
 
-
+    /// Create an empty search engine using the requested case mode.
     explicit AhoCorasickSearch(bnfa_case flag = bnfa_case::BNFA_CASE);
+
+    /// Release all pattern and automaton storage.
     ~AhoCorasickSearch();
     
+    /**
+     * @brief Enable or disable failure-state optimization during compile().
+     *
+     * This must be configured before compile().
+     */
     void setOptimizeFailureStates(bool flag=true);
 
-    //
-    // Add a pattern to search
-    //   patBegin,patEnd: are char/unsigned char iterators
-    //                    specifying the pattern.
-    //   nocase: if true, case insensitive search
-    //           otherwise binary search
-    //           Behavior is dependent on the case mode
-    //           if BNFA_NOCASE or BNFA_CASE, this setting is ignored
-    //   userdata: a pointer to user-specific data associated to pattern
+    /**
+     * @brief Add a pattern to the automaton input set.
+     *
+     * Patterns must be added before compile(). Empty patterns and patterns
+     * larger than UINT_MAX bytes are rejected.
+     *
+     * @tparam RAIterator Random-access iterator over char-compatible bytes.
+     * @param patBegin First pattern byte.
+     * @param patEnd One-past-the-end pattern byte.
+     * @param nocase In BNFA_PER_PAT_CASE mode, true makes this pattern
+     * case-insensitive. In BNFA_CASE and BNFA_NOCASE modes this value is
+     * ignored.
+     * @param userdata User data passed back to the match callback.
+     * @return 0 on success, -1 on invalid input or allocation failure.
+     */
     template<typename RAIterator>
     int addPattern(
         RAIterator patBegin,
@@ -121,12 +159,35 @@ public:
         any_t userdata
         );
 
+    /**
+     * @brief Build the searchable automaton from the added patterns.
+     *
+     * @return 0 on success, -1 on allocation failure or unsupported automaton
+     * size/format.
+     */
     int compile();
 
-    // current_state is optional for single-buffer searches. Pass the same
-    // non-null state pointer across calls to continue matching across buffers.
-    // In BNFA_PER_PAT_CASE, case-sensitive patterns that begin before the
-    // current buffer cannot be exact-case verified and are not reported.
+    /**
+     * @brief Search a buffer and report matches through a callback.
+     *
+     * current_state is optional for single-buffer searches. Pass the same
+     * non-null state pointer across calls to continue matching across buffers.
+     * In BNFA_PER_PAT_CASE, case-sensitive patterns that begin before the
+     * current buffer cannot be exact-case verified and are not reported.
+     *
+     * @tparam RAIterator Random-access iterator over char-compatible bytes.
+     * @param begin First input byte.
+     * @param end One-past-the-end input byte.
+     * @param match Callback invoked for each reported match.
+     * @param userdata User data passed to the callback as search_userdata.
+     * @param sindex Initial automaton state for legacy callers. Use 0 for new
+     * searches.
+     * @param current_state Optional state pointer for streaming searches. If
+     * non-null, its input value overrides sindex and its output value can be
+     * passed to the next search() call.
+     * @return Legacy status/count value. Use the callback as the authoritative
+     * match-reporting mechanism.
+     */
     template<typename RAIterator>
     unsigned search(RAIterator begin, RAIterator end,
         match_function_ptr_t match,
@@ -134,10 +195,14 @@ public:
         bnfa_state_index_t sindex,
         bnfa_state_index_t* current_state);
 
+    /// Return the number of patterns added to this search engine.
     int getPatternCount();
 
-    void print(); /* prints the nfa states-verbose!! */
-    void printInfo(); /* print info on this search engine */
+    /// Print the compiled NFA states to stderr. Intended for diagnostics.
+    void print();
+    /// Print memory and state statistics to stderr.
+    void printInfo();
+    /// Print memory and state statistics to stderr with a legacy text argument.
     void printInfoEx(char * text);
 private:
 
