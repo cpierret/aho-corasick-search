@@ -461,10 +461,11 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
     any_t userdata, bnfa_state_index_t sindex, bnfa_state_index_t* current_state)
 {
     int ret = 0;
+    bnfa_state_index_t local_state = sindex;
 
     if (current_state)
     {
-        sindex = *current_state;
+        local_state = *current_state;
     }
 
     if (bnfaCaseMode == bnfa_case::BNFA_PER_PAT_CASE)
@@ -478,8 +479,8 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
                 itEnd, 
                 match_function_functor_check<RAIterator>(Match,begin,true),
                 userdata, 
-                sindex, 
-                current_state
+                local_state,
+                &local_state
                 );
         }
         else
@@ -489,8 +490,8 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
                 itEnd, 
                 match_function_functor_check<RAIterator>(Match,begin, true),
                 userdata,
-                sindex, 
-                current_state
+                local_state,
+                &local_state
                 );
         }
     }
@@ -501,8 +502,8 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
             end, 
             match_function_functor_check<RAIterator>(Match, begin,false),
             userdata, 
-            sindex, 
-            current_state
+            local_state,
+            &local_state
             );
     }
     else/* NOCASE */
@@ -514,9 +515,13 @@ AhoCorasickSearch::search(RAIterator begin, RAIterator end,
             itEnd, 
             match_function_functor_check<RAIterator>(Match, begin, false),
             userdata, 
-            sindex, 
-            current_state
+            local_state,
+            &local_state
             );
+    }
+    if (current_state)
+    {
+        *current_state = local_state;
     }
     return ret;
 }

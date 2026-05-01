@@ -65,6 +65,11 @@ int main() {
     assert(matches.size() == 1);
     assert(matches[0] == 9);
 
+    matches.clear();
+    ac.search(text.begin(), text.end(), collect_match, &matches, 0, nullptr);
+    assert(matches.size() == 1);
+    assert(matches[0] == 9);
+
     AhoCorasickSearch hello_search;
     const std::string hello = "hello";
     add_pattern(hello_search, hello);
