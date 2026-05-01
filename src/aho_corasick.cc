@@ -1000,6 +1000,7 @@ AhoCorasickSearch::compile()
         bnfaTransTable->transitions.assign(bnfaMaxStates, nullptr);
         list_memory = sizeof(bnfa_trans_table_t) +
             bnfaTransTable->transitions.size() * sizeof(bnfa_trans_node_t*);
+        transition_node_storage_.reserve(bnfaMaxStates > 0 ? bnfaMaxStates - 1 : 0);
 
         /*
         ** Alloc a MatchList table -
@@ -1007,6 +1008,7 @@ AhoCorasickSearch::compile()
         */
         bnfaMatchList.assign(bnfaMaxStates, nullptr);
         matchlist_memory = bnfaMatchList.size() * sizeof(bnfa_match_node_t*);
+        match_node_storage_.reserve(bnfaPatternCnt);
 
         /* Add each Pattern to the State Table - This forms a keyword trie using lists */
         bnfaNumStates = 0;
