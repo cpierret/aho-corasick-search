@@ -30,3 +30,6 @@
 # Temporary build directories
 build*/
 /build*/
+
+# Generated documentation
+/docs/api/

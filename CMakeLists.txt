@@ -3,6 +3,7 @@ project(AhoCorasickSearch LANGUAGES CXX)
 
 option(BUILD_EXAMPLES "Build example binaries" OFF)
 option(BUILD_TESTS "Build tests" OFF)
+option(BUILD_DOCS "Enable the Doxygen documentation target" ON)
 option(ENABLE_ASAN "Build with AddressSanitizer" OFF)
 option(ENABLE_COVERAGE "Build tests with code coverage instrumentation" OFF)
 
@@ -61,6 +62,26 @@ if(BUILD_EXAMPLES)
     target_link_libraries(example aho_corasick_search)
     enable_asan_for(example)
     enable_coverage_for(example)
+endif()
+
+if(BUILD_DOCS)
+    find_program(DOXYGEN_EXECUTABLE doxygen)
+    if(DOXYGEN_EXECUTABLE)
+        add_custom_target(docs
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_SOURCE_DIR}/docs/api
+            COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            COMMENT "Generating API documentation with Doxygen"
+            VERBATIM
+        )
+    else()
+        add_custom_target(docs
+            COMMAND ${CMAKE_COMMAND} -E echo "Doxygen executable not found. Install Doxygen or configure with -DBUILD_DOCS=OFF."
+            COMMAND ${CMAKE_COMMAND} -E false
+            COMMENT "Doxygen is required to generate API documentation"
+            VERBATIM
+        )
+    endif()
 endif()
 
 if(BUILD_TESTS)
