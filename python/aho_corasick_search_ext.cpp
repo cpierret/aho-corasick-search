@@ -133,6 +133,34 @@ int count_match(
     return 0;
 }
 
+#ifdef AHO_CORASICK_SEARCH_STATS
+nb::dict search_stats_to_dict(const textsearch::AhoCorasickSearch::SearchStats& stats)
+{
+    nb::dict result;
+    result["transition_calls"] = stats.transition_calls;
+    result["state_visits"] = stats.state_visits;
+    result["full_row_visits"] = stats.full_row_visits;
+    result["full_root_transitions"] = stats.full_root_transitions;
+    result["full_root_zero_transitions"] = stats.full_root_zero_transitions;
+    result["full_non_root_hits"] = stats.full_non_root_hits;
+    result["full_non_root_misses"] = stats.full_non_root_misses;
+    result["sparse_row_visits"] = stats.sparse_row_visits;
+    result["sparse_linear_rows"] = stats.sparse_linear_rows;
+    result["sparse_linear_comparisons"] = stats.sparse_linear_comparisons;
+    result["sparse_linear_hits"] = stats.sparse_linear_hits;
+    result["sparse_linear_misses"] = stats.sparse_linear_misses;
+    result["sparse_binary_rows"] = stats.sparse_binary_rows;
+    result["sparse_binary_comparisons"] = stats.sparse_binary_comparisons;
+    result["sparse_binary_hits"] = stats.sparse_binary_hits;
+    result["sparse_binary_misses"] = stats.sparse_binary_misses;
+    result["failure_transitions"] = stats.failure_transitions;
+    result["match_state_checks"] = stats.match_state_checks;
+    result["match_state_hits"] = stats.match_state_hits;
+    result["match_candidates"] = stats.match_candidates;
+    return result;
+}
+#endif
+
 class PyAhoCorasick {
 public:
     explicit PyAhoCorasick(const std::vector<std::string>& patterns)
@@ -226,6 +254,18 @@ public:
         return count;
     }
 
+#ifdef AHO_CORASICK_SEARCH_STATS
+    void reset_search_stats()
+    {
+        search_.resetSearchStats();
+    }
+
+    nb::dict get_search_stats() const
+    {
+        return search_stats_to_dict(search_.getSearchStats());
+    }
+#endif
+
 private:
     std::vector<std::string> patterns_;
     std::vector<std::size_t> pattern_lengths_;
@@ -254,5 +294,16 @@ NB_MODULE(aho_corasick_search_ext, module)
             "count_matches",
             &PyAhoCorasick::count_matches,
             "haystack"_a,
-            "Return the number of matches without allocating match result tuples.");
+            "Return the number of matches without allocating match result tuples.")
+#ifdef AHO_CORASICK_SEARCH_STATS
+        .def(
+            "reset_search_stats",
+            &PyAhoCorasick::reset_search_stats,
+            "Reset native search instrumentation counters.")
+        .def(
+            "get_search_stats",
+            &PyAhoCorasick::get_search_stats,
+            "Return native search instrumentation counters.")
+#endif
+        ;
 }

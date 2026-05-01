@@ -6,6 +6,7 @@ option(BUILD_TESTS "Build tests" OFF)
 option(BUILD_PYTHON_EXTENSION "Build the native CPython extension" OFF)
 option(ENABLE_ASAN "Build with AddressSanitizer" OFF)
 option(ENABLE_COVERAGE "Build tests with code coverage instrumentation" OFF)
+option(ENABLE_SEARCH_STATS "Enable native search instrumentation counters" OFF)
 
 set(ASAN_FLAGS -fsanitize=address -fno-omit-frame-pointer -g)
 set(COVERAGE_COMPILE_FLAGS --coverage -O0 -g)
@@ -49,6 +50,10 @@ target_include_directories(aho_corasick_search
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
 )
+
+if(ENABLE_SEARCH_STATS)
+    target_compile_definitions(aho_corasick_search PUBLIC AHO_CORASICK_SEARCH_STATS)
+endif()
 
 # Require C++17
 set_target_properties(aho_corasick_search PROPERTIES

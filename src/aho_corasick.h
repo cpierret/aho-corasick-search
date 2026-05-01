@@ -96,6 +96,41 @@ public:
         BNFA_NOCASE        // case-insensitive search
     };
 
+#ifdef AHO_CORASICK_SEARCH_STATS
+    struct SearchStats {
+        uint64_t transition_calls = 0;
+        uint64_t state_visits = 0;
+        uint64_t full_row_visits = 0;
+        uint64_t full_root_transitions = 0;
+        uint64_t full_root_zero_transitions = 0;
+        uint64_t full_non_root_hits = 0;
+        uint64_t full_non_root_misses = 0;
+        uint64_t sparse_row_visits = 0;
+        uint64_t sparse_linear_rows = 0;
+        uint64_t sparse_linear_comparisons = 0;
+        uint64_t sparse_linear_hits = 0;
+        uint64_t sparse_linear_misses = 0;
+        uint64_t sparse_binary_rows = 0;
+        uint64_t sparse_binary_comparisons = 0;
+        uint64_t sparse_binary_hits = 0;
+        uint64_t sparse_binary_misses = 0;
+        uint64_t failure_transitions = 0;
+        uint64_t match_state_checks = 0;
+        uint64_t match_state_hits = 0;
+        uint64_t match_candidates = 0;
+    };
+
+    void resetSearchStats()
+    {
+        search_stats_ = SearchStats {};
+    }
+
+    SearchStats getSearchStats() const
+    {
+        return search_stats_;
+    }
+#endif
+
     void setCase(bnfa_case flag);
 
 
@@ -333,6 +368,10 @@ private:
     std::vector<std::unique_ptr<bnfa_trans_node_t>> transition_node_storage_;
     std::vector<std::unique_ptr<bnfa_match_node_t>> match_node_storage_;
 
+#ifdef AHO_CORASICK_SEARCH_STATS
+    SearchStats search_stats_;
+#endif
+
     size_t 			   bnfa_memory;
     size_t 			   pat_memory;
     size_t 			   list_memory;
@@ -387,7 +426,14 @@ private:
     
     static int KcontainsJ(bnfa_trans_node_t * tk, bnfa_trans_node_t *tj);
     
-    static FORCE_INLINE bnfa_state_index_t _bnfa_get_next_state_csparse_nfa(bnfa_state_t * pcx, bnfa_state_index_t sindex, unsigned  input);
+    static FORCE_INLINE bnfa_state_index_t _bnfa_get_next_state_csparse_nfa(
+        bnfa_state_t * pcx,
+        bnfa_state_index_t sindex,
+        unsigned input
+#ifdef AHO_CORASICK_SEARCH_STATS
+        , SearchStats* stats
+#endif
+        );
 
 
     static
@@ -446,7 +492,14 @@ private:
         return (state & BNFA_SPARSE_MATCH_BIT)!=0;
     }
 
-    static inline int _bnfa_binearch(bnfa_state_t * a, int a_len, bnfa_state_t val)
+    static inline int _bnfa_binearch(
+        bnfa_state_t * a,
+        int a_len,
+        bnfa_state_t val
+#ifdef AHO_CORASICK_SEARCH_STATS
+        , SearchStats* stats
+#endif
+        )
     {
         int m, l, r;
         bnfa_state_t c;
@@ -456,6 +509,9 @@ private:
         {
             m = (r + l) >> 1;
             c = a[m] >> BNFA_SPARSE_VALUE_SHIFT;
+#ifdef AHO_CORASICK_SEARCH_STATS
+            ++stats->sparse_binary_comparisons;
+#endif
             if (val == c)
             {
                 return m;
@@ -566,11 +622,24 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator Tend,
         last_sindex = sindex;
 
         /* Transition to next state index */
-        sindex = _bnfa_get_next_state_csparse_nfa(transList, sindex, static_cast<unsigned char>(*T));
+        sindex = _bnfa_get_next_state_csparse_nfa(
+            transList,
+            sindex,
+            static_cast<unsigned char>(*T)
+#ifdef AHO_CORASICK_SEARCH_STATS
+            , &search_stats_
+#endif
+            );
 
         /* Log matches in this state - if any */
+#ifdef AHO_CORASICK_SEARCH_STATS
+        ++search_stats_.match_state_checks;
+#endif
         if (sindex && isMatchState(transList[sindex + 1]) )
         {
+#ifdef AHO_CORASICK_SEARCH_STATS
+            ++search_stats_.match_state_hits;
+#endif
             /* Test for same as last state */
             if (sindex == last_sindex)
                 continue;
@@ -592,6 +661,9 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator Tend,
                 else
                     index = raw_index;
                 nfound++;
+#ifdef AHO_CORASICK_SEARCH_STATS
+                ++search_stats_.match_candidates;
+#endif
                 if (_add_queue(mlist, index))
                 {
                     if (_process_queue(match_functor, userdata,begin))
@@ -632,11 +704,24 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_case(RAIterator begin, RAIterator Te
     for (; T<Tend; ++T)
     {
         /* Transition to next state index */
-        sindex = _bnfa_get_next_state_csparse_nfa(transList, sindex, static_cast<unsigned char>(*T));
+        sindex = _bnfa_get_next_state_csparse_nfa(
+            transList,
+            sindex,
+            static_cast<unsigned char>(*T)
+#ifdef AHO_CORASICK_SEARCH_STATS
+            , &search_stats_
+#endif
+            );
 
         /* Log matches in this state - if any */
+#ifdef AHO_CORASICK_SEARCH_STATS
+        ++search_stats_.match_state_checks;
+#endif
         if (sindex && isMatchState(transList[sindex + 1]) )
         {
+#ifdef AHO_CORASICK_SEARCH_STATS
+            ++search_stats_.match_state_hits;
+#endif
             if (sindex == last_match)
                 continue;
 
@@ -655,6 +740,9 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_case(RAIterator begin, RAIterator Te
                 else
                     index = raw_index;
                 nfound++;
+#ifdef AHO_CORASICK_SEARCH_STATS
+                ++search_stats_.match_candidates;
+#endif
                 /* Don't do anything specific for case sensitive patterns and not,
                 * since that will be covered by the rule tree itself.  Each tree
                 * might have both case sensitive & case insensitive patterns.
@@ -762,6 +850,9 @@ AhoCorasickSearch::_bnfa_get_next_state_csparse_nfa(
     bnfa_state_t * pcx,
     bnfa_state_index_t sindex,
     unsigned  input
+#ifdef AHO_CORASICK_SEARCH_STATS
+    , SearchStats* stats
+#endif
     )
 {
     unsigned k;
@@ -769,49 +860,109 @@ AhoCorasickSearch::_bnfa_get_next_state_csparse_nfa(
     int index;
     bnfa_state_t * pcs;
 
+#ifdef AHO_CORASICK_SEARCH_STATS
+    ++stats->transition_calls;
+#endif
+
     for (;;)
     {
+#ifdef AHO_CORASICK_SEARCH_STATS
+        ++stats->state_visits;
+#endif
         pcs = pcx + sindex + 1; /* skip state-id == 1st word */
 
         if (isFullFormat(pcs[0]))
         {
+#ifdef AHO_CORASICK_SEARCH_STATS
+            ++stats->full_row_visits;
+#endif
             if (sindex == 0)
             {
-                return fullGetTransitionState(pcs[1 + input]);
+                bnfa_state_index_t idx = fullGetTransitionState(pcs[1 + input]);
+#ifdef AHO_CORASICK_SEARCH_STATS
+                ++stats->full_root_transitions;
+                if (idx == 0)
+                {
+                    ++stats->full_root_zero_transitions;
+                }
+#endif
+                return idx;
             }
             else
             {
                 bnfa_state_index_t idx = fullGetTransitionState(pcs[1 + input]);
                 if (idx != 0)
+                {
+#ifdef AHO_CORASICK_SEARCH_STATS
+                    ++stats->full_non_root_hits;
+#endif
                     return idx;
+                }
+#ifdef AHO_CORASICK_SEARCH_STATS
+                ++stats->full_non_root_misses;
+#endif
             }
         }
         else // Sparse
         {
+#ifdef AHO_CORASICK_SEARCH_STATS
+            ++stats->sparse_row_visits;
+#endif
             nc = sparseGetNumberOfTransitions(pcs[0]);
             if (nc > BNFA_SPARSE_LINEAR_SEARCH_LIMIT)
             {
+#ifdef AHO_CORASICK_SEARCH_STATS
+                ++stats->sparse_binary_rows;
+#endif
                 /* binary search... */
-                index = _bnfa_binearch(pcs + 1, nc, input);
+                index = _bnfa_binearch(
+                    pcs + 1,
+                    nc,
+                    input
+#ifdef AHO_CORASICK_SEARCH_STATS
+                    , stats
+#endif
+                    );
                 if (index >= 0)
                 {
+#ifdef AHO_CORASICK_SEARCH_STATS
+                    ++stats->sparse_binary_hits;
+#endif
                     return sparseGetTransitionState(pcs[index + 1]);
                 }
+#ifdef AHO_CORASICK_SEARCH_STATS
+                ++stats->sparse_binary_misses;
+#endif
             }
             else
             {
+#ifdef AHO_CORASICK_SEARCH_STATS
+                ++stats->sparse_linear_rows;
+#endif
                 /* linear search... */
                 for (k = 0; k < nc; k++)
                 {
+#ifdef AHO_CORASICK_SEARCH_STATS
+                    ++stats->sparse_linear_comparisons;
+#endif
                     if ((pcs[k + 1] >> BNFA_SPARSE_VALUE_SHIFT) == input)
                     {
+#ifdef AHO_CORASICK_SEARCH_STATS
+                        ++stats->sparse_linear_hits;
+#endif
                         return sparseGetTransitionState(pcs[k + 1]);
                     }
                 }
+#ifdef AHO_CORASICK_SEARCH_STATS
+                ++stats->sparse_linear_misses;
+#endif
             }
         }
 
         /* no transition found ... get the failure state and try again  */
+#ifdef AHO_CORASICK_SEARCH_STATS
+        ++stats->failure_transitions;
+#endif
         sindex = getFailureState(pcs[0]);
     }
 }

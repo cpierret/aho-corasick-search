@@ -64,6 +64,21 @@ PY
 The Python API reports byte offsets. This is the fastest path and matches the
 ASCII benchmark data used by `ahocorasick_rs`.
 
+For native search profiling, enable instrumentation counters in a profiling
+build:
+
+```sh
+cmake -S . -B build-python-stats \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DBUILD_PYTHON_EXTENSION=ON \
+  -DENABLE_SEARCH_STATS=ON
+cmake --build build-python-stats
+```
+
+When built with `ENABLE_SEARCH_STATS=ON`, the Python `AhoCorasick` object also
+provides `reset_search_stats()` and `get_search_stats()` for inspecting sparse
+NFA transition behavior.
+
 ## Usage example
 
 ```cpp
