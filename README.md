@@ -22,6 +22,17 @@ cmake --build .
 ctest
 ```
 
+To collect unit-test coverage with GCC or Clang, enable coverage
+instrumentation and build the `coverage` target:
+
+```sh
+mkdir build-coverage && cd build-coverage
+cmake .. -DBUILD_TESTS=ON -DENABLE_COVERAGE=ON
+cmake --build . --target coverage
+```
+
+The generated `gcov` reports are written to `build-coverage/coverage/`.
+
 ## Usage example
 
 ```cpp
