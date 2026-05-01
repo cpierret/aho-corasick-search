@@ -269,6 +269,8 @@ public:
             textsearch::AhoCorasickSearch::getFullRowMinTransitions();
         result["failureless_full_rows"] =
             textsearch::AhoCorasickSearch::hasFailurelessFullRows();
+        result["sparse_failureless_max_transitions"] =
+            textsearch::AhoCorasickSearch::getSparseFailurelessMaxTransitions();
         result["failureless_cache_max_states"] =
             textsearch::AhoCorasickSearch::getFailurelessCacheMaxStates();
         return result;

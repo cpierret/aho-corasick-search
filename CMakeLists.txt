@@ -9,6 +9,7 @@ option(ENABLE_COVERAGE "Build tests with code coverage instrumentation" OFF)
 option(ENABLE_SEARCH_STATS "Enable native search instrumentation counters" OFF)
 option(ENABLE_FAILURELESS_FULL_ROWS "Resolve full-row failure transitions at compile time" ON)
 set(FULL_ROW_MIN_TRANSITIONS 4 CACHE STRING "Minimum transition count that stores a non-root row in full format")
+set(SPARSE_FAILURELESS_MAX_TRANSITIONS 0 CACHE STRING "Maximum sparse-row transition count after failureless expansion; 0 disables expansion")
 set(FAILURELESS_CACHE_MAX_STATES 0 CACHE STRING "Maximum states with precomputed failureless transitions; 0 disables the cache")
 
 if("${FULL_ROW_MIN_TRANSITIONS}" MATCHES "^[0-9][0-9]*$")
@@ -17,6 +18,13 @@ else()
 endif()
 if(FULL_ROW_MIN_TRANSITIONS LESS 1 OR FULL_ROW_MIN_TRANSITIONS GREATER 64)
     message(FATAL_ERROR "FULL_ROW_MIN_TRANSITIONS must be an integer from 1 to 64")
+endif()
+if("${SPARSE_FAILURELESS_MAX_TRANSITIONS}" MATCHES "^[0-9][0-9]*$")
+else()
+    message(FATAL_ERROR "SPARSE_FAILURELESS_MAX_TRANSITIONS must be an integer from 0 to 63")
+endif()
+if(SPARSE_FAILURELESS_MAX_TRANSITIONS GREATER 63)
+    message(FATAL_ERROR "SPARSE_FAILURELESS_MAX_TRANSITIONS must be an integer from 0 to 63")
 endif()
 if("${FAILURELESS_CACHE_MAX_STATES}" MATCHES "^[0-9][0-9]*$")
 else()
@@ -76,6 +84,7 @@ else()
 endif()
 target_compile_definitions(aho_corasick_search PUBLIC
     AHO_CORASICK_FULL_ROW_MIN_TRANSITIONS=${FULL_ROW_MIN_TRANSITIONS}
+    AHO_CORASICK_SPARSE_FAILURELESS_MAX_TRANSITIONS=${SPARSE_FAILURELESS_MAX_TRANSITIONS}
     AHO_CORASICK_FAILURELESS_CACHE_MAX_STATES=${FAILURELESS_CACHE_MAX_STATES}
 )
 

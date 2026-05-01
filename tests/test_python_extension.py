@@ -35,6 +35,7 @@ def test_get_automaton_info():
     assert info["total_memory_bytes"] >= info["transition_memory_bytes"]
     assert 1 <= info["full_row_min_transitions"] <= 64
     assert isinstance(info["failureless_full_rows"], bool)
+    assert 0 <= info["sparse_failureless_max_transitions"] <= 63
     assert info["failureless_cache_max_states"] >= 0
 
 

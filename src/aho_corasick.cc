@@ -538,6 +538,94 @@ AhoCorasickSearch::_bnfa_build_nfa()
     return 0;
 }
 
+AhoCorasickSearch::bnfa_state_index_t
+AhoCorasickSearch::_bnfa_list_get_next_state_follow_failure(
+    bnfa_state_index_t state,
+    unsigned char input)
+{
+    for (;;)
+    {
+        const bnfa_state_index_t next = _bnfa_list_get_next_state(state, input);
+        if (next != BNFA_FAIL_STATE)
+        {
+            return next;
+        }
+
+        state = bnfaFailState[state];
+    }
+}
+
+int
+AhoCorasickSearch::_expand_sparse_failure_transitions()
+{
+    if (BNFA_SPARSE_FAILURELESS_MAX_TRANSITIONS == 0)
+    {
+        return 0;
+    }
+
+    const unsigned max_sparse_transitions =
+        BNFA_SPARSE_FAILURELESS_MAX_TRANSITIONS < BNFA_FULL_ROW_MIN_TRANSITIONS
+            ? BNFA_SPARSE_FAILURELESS_MAX_TRANSITIONS
+            : BNFA_FULL_ROW_MIN_TRANSITIONS - 1;
+    if (max_sparse_transitions == 0)
+    {
+        return 0;
+    }
+
+    bnfa_state_t full[BNFA_MAX_ALPHABET_SIZE];
+
+    for (bnfa_state_index_t state = 1; state < bnfaNumStates; ++state)
+    {
+        ptrdiff_t transition_count = _bnfa_list_conv_row_to_full(state, full);
+        if (transition_count < 0)
+        {
+            return -1;
+        }
+
+        if (static_cast<unsigned>(transition_count) >= max_sparse_transitions ||
+            shouldUseFullFormatForRow(
+                state,
+                static_cast<unsigned>(transition_count),
+                bnfaForceFullZeroState))
+        {
+            continue;
+        }
+
+        const bnfa_state_index_t failure_state = bnfaFailState[state];
+        for (unsigned input = 0;
+             input < BNFA_MAX_ALPHABET_SIZE &&
+                static_cast<unsigned>(transition_count) < max_sparse_transitions;
+             ++input)
+        {
+            if (full[input] != 0)
+            {
+                continue;
+            }
+
+            const bnfa_state_index_t resolved_state =
+                _bnfa_list_get_next_state_follow_failure(
+                    failure_state,
+                    static_cast<unsigned char>(input));
+            if (resolved_state == 0)
+            {
+                continue;
+            }
+
+            if (_bnfa_list_put_next_state(
+                    state,
+                    static_cast<unsigned char>(input),
+                    resolved_state) < 0)
+            {
+                return -1;
+            }
+            full[input] = resolved_state;
+            ++transition_count;
+        }
+    }
+
+    return 0;
+}
+
 
 /*
 *  Convert state machine to csparse format
@@ -1195,6 +1283,11 @@ AhoCorasickSearch::compile()
 
         /* Build the nfa w/failure states - time the nfa construction */
         if (_bnfa_build_nfa())
+        {
+            return fail();
+        }
+
+        if (_expand_sparse_failure_transitions())
         {
             return fail();
         }

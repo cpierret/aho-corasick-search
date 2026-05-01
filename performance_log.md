@@ -218,10 +218,11 @@ A selective cached or failureless transition path could precompute the final
 transition for hot `(state, byte)` pairs or hot states, turning repeated failure
 walks into direct lookups.
 
-We implemented two variants and kept them separately configurable:
+We implemented three variants and kept them separately configurable:
 
 1. In-place failureless full rows.
-2. A dense failureless cache for the first N compiled states.
+2. Bounded sparse-row failureless expansion.
+3. A dense failureless cache for the first N compiled states.
 
 ### In-Place Full Rows
 
@@ -265,6 +266,51 @@ Focused long overlapping-index benchmark:
 
 This was the best result so far because it removed about 31 million failure
 transitions without adding a second large transition table.
+
+### Bounded Sparse-Row Expansion
+
+After abandoning hot-state selective caching as too workload-specific, we tried
+a structure-based variant for sparse rows. During compilation, before compaction
+into sparse/full rows, each sparse row can inherit transitions from its failure
+chain until it reaches a configured cap:
+
+```sh
+-DSPARSE_FAILURELESS_MAX_TRANSITIONS=2
+```
+
+`0` disables the expansion and remains the default. With the current
+`FULL_ROW_MIN_TRANSITIONS=4`, cap `3` is the largest value that keeps the rows
+sparse and isolates this knob from full-row threshold tuning.
+
+Long-dataset direct timing sweep:
+
+| Sparse Cap | Count Median | Index Median | Transition Memory |
+| ---: | ---: | ---: | ---: |
+| 0 | 184.5 ms | 183.6 ms | 1,033,360 bytes |
+| 1 | 184.5 ms | 183.4 ms | 1,062,384 bytes |
+| 2 | 179.1 ms | 182.9 ms | 1,138,208 bytes |
+| 3 | 188.6 ms | 185.0 ms | 1,221,712 bytes |
+
+Stats explain why the result is weak:
+
+| Sparse Cap | Failure Transitions | Sparse Comparisons | State Visits |
+| ---: | ---: | ---: | ---: |
+| 0 | 14,598,621 | 32,897,409 | 77,583,296 |
+| 1 | 14,598,621 | 32,898,535 | 77,583,296 |
+| 2 | 14,199,733 | 41,100,511 | 77,184,408 |
+| 3 | 14,099,733 | 54,002,268 | 77,084,408 |
+
+The expansion is structurally valid and cap `2` passed sorted correctness checks
+against `ahocorasick_rs` on the short and long datasets. However, the extra
+inherited transitions make every sparse-row visit scan longer rows. On this
+workload, the added linear scan cost mostly cancels out the smaller failure
+walk count.
+
+Decision:
+
+- Keep `SPARSE_FAILURELESS_MAX_TRANSITIONS` as an opt-in experiment.
+- Do not enable it by default without another workload where the failure-walk
+  reduction clearly outweighs the longer sparse scans.
 
 ### Dense Failureless Cache
 

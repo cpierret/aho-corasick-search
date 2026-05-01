@@ -90,6 +90,21 @@ cmake -S . -B build-python-no-fullrow-resolve \
 cmake --build build-python-no-fullrow-resolve
 ```
 
+The build can also expand sparse rows with inherited failure transitions while
+keeping the rows sparse. This is disabled by default because it can reduce
+failure walks at the cost of longer linear sparse scans:
+
+```sh
+cmake -S . -B build-python-sparse-failureless \
+  -DBUILD_PYTHON_EXTENSION=ON \
+  -DSPARSE_FAILURELESS_MAX_TRANSITIONS=2
+cmake --build build-python-sparse-failureless
+```
+
+With the default `FULL_ROW_MIN_TRANSITIONS=4`, values above `3` have no
+additional effect for sparse rows; tune the full-row threshold separately if
+you want to test larger expanded rows.
+
 The build also supports a dense failureless cache for the first N compiled
 states. This can remove more failure transitions, but it adds
 `N * 256 * sizeof(state)` memory plus an offset table and should be benchmarked
@@ -104,7 +119,8 @@ cmake --build build-python-cache1024
 
 The Python `AhoCorasick` object provides `get_automaton_info()` to inspect
 state count, transition memory, total memory, and the compiled full-row
-threshold, as well as failureless full-row and dense-cache settings.
+threshold, as well as failureless full-row, sparse-expansion, and dense-cache
+settings.
 
 For native search profiling, enable instrumentation counters in a profiling
 build:

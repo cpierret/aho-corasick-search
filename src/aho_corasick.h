@@ -81,6 +81,10 @@
 #define AHO_CORASICK_FAILURELESS_CACHE_MAX_STATES 0
 #endif
 
+#ifndef AHO_CORASICK_SPARSE_FAILURELESS_MAX_TRANSITIONS
+#define AHO_CORASICK_SPARSE_FAILURELESS_MAX_TRANSITIONS 0
+#endif
+
 #ifndef AHO_CORASICK_FAILURELESS_FULL_ROWS
 #define AHO_CORASICK_FAILURELESS_FULL_ROWS 1
 #endif
@@ -197,6 +201,10 @@ public:
     {
         return BNFA_FAILURELESS_CACHE_MAX_STATES;
     }
+    static constexpr unsigned getSparseFailurelessMaxTransitions()
+    {
+        return BNFA_SPARSE_FAILURELESS_MAX_TRANSITIONS;
+    }
     static constexpr bool hasFailurelessFullRows()
     {
         return BNFA_FAILURELESS_FULL_ROWS;
@@ -258,6 +266,8 @@ private:
     static constexpr unsigned BNFA_MAX_ALPHABET_SIZE = 256;
     static constexpr unsigned BNFA_FULL_ROW_MIN_TRANSITIONS =
         AHO_CORASICK_FULL_ROW_MIN_TRANSITIONS;
+    static constexpr unsigned BNFA_SPARSE_FAILURELESS_MAX_TRANSITIONS =
+        AHO_CORASICK_SPARSE_FAILURELESS_MAX_TRANSITIONS;
     static constexpr size_t BNFA_FAILURELESS_CACHE_MAX_STATES =
         AHO_CORASICK_FAILURELESS_CACHE_MAX_STATES;
     static constexpr bool BNFA_FAILURELESS_FULL_ROWS =
@@ -266,6 +276,9 @@ private:
         BNFA_FULL_ROW_MIN_TRANSITIONS >= 1 &&
             BNFA_FULL_ROW_MIN_TRANSITIONS <= BNFA_SPARSE_MAX_ROW_TRANSITIONS + 1,
         "AHO_CORASICK_FULL_ROW_MIN_TRANSITIONS must be between 1 and 64");
+    static_assert(
+        BNFA_SPARSE_FAILURELESS_MAX_TRANSITIONS <= BNFA_SPARSE_MAX_ROW_TRANSITIONS,
+        "AHO_CORASICK_SPARSE_FAILURELESS_MAX_TRANSITIONS must be between 0 and 63");
 
  
     /*
@@ -451,6 +464,10 @@ private:
     int _bnfa_add_pattern_states(bnfa_pattern_t * p);
     int _bnfa_opt_nfa();
     int _bnfa_build_nfa();
+    int _expand_sparse_failure_transitions();
+    bnfa_state_index_t _bnfa_list_get_next_state_follow_failure(
+        bnfa_state_index_t state,
+        unsigned char input);
     int _bnfa_conv_list_to_csparse_array();
     int _resolve_full_row_failure_transitions();
     int _build_failureless_transition_cache(const std::vector<bnfa_state_index_t>& state_indexes);
@@ -719,7 +736,7 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator Tend,
 #ifdef AHO_CORASICK_SEARCH_STATS
         ++search_stats_.match_state_checks;
 #endif
-        if (sindex && isMatchState(transList[sindex + 1]) )
+        if (sindex && isMatchState(transList[sindex + 1]))
         {
 #ifdef AHO_CORASICK_SEARCH_STATS
             ++search_stats_.match_state_hits;
@@ -818,7 +835,7 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_case(RAIterator begin, RAIterator Te
 #ifdef AHO_CORASICK_SEARCH_STATS
         ++search_stats_.match_state_checks;
 #endif
-        if (sindex && isMatchState(transList[sindex + 1]) )
+        if (sindex && isMatchState(transList[sindex + 1]))
         {
 #ifdef AHO_CORASICK_SEARCH_STATS
             ++search_stats_.match_state_hits;
@@ -979,7 +996,13 @@ AhoCorasickSearch::_bnfa_get_next_state_csparse_nfa(
 #endif
 #if AHO_CORASICK_FAILURELESS_FULL_ROWS
             bnfa_state_index_t idx = fullGetTransitionState(pcs[1 + input]);
-            if (sindex == 0)
+            if (sindex != 0)
+            {
+#ifdef AHO_CORASICK_SEARCH_STATS
+                ++stats->full_non_root_hits;
+#endif
+            }
+            else
             {
 #ifdef AHO_CORASICK_SEARCH_STATS
                 ++stats->full_root_transitions;
@@ -987,12 +1010,6 @@ AhoCorasickSearch::_bnfa_get_next_state_csparse_nfa(
                 {
                     ++stats->full_root_zero_transitions;
                 }
-#endif
-            }
-            else
-            {
-#ifdef AHO_CORASICK_SEARCH_STATS
-                ++stats->full_non_root_hits;
 #endif
             }
             return idx;
