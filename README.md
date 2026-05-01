@@ -64,6 +64,48 @@ PY
 The Python API reports byte offsets. This is the fastest path and matches the
 ASCII benchmark data used by `ahocorasick_rs`.
 
+By default, the root row and non-root rows with at least four outgoing
+transitions use full 256-entry storage. This favors search throughput over the
+most compact sparse layout. To tune the speed/memory tradeoff, set the minimum
+transition count for full rows:
+
+```sh
+cmake -S . -B build-python-full8 \
+  -DBUILD_PYTHON_EXTENSION=ON \
+  -DFULL_ROW_MIN_TRANSITIONS=8
+cmake --build build-python-full8
+```
+
+Use `FULL_ROW_MIN_TRANSITIONS=64` to restore the previous compact behavior,
+where only the root row and rows too large for sparse encoding use full
+storage.
+
+Full rows resolve failure transitions at compile time by default. This keeps
+the same transition-table size while avoiding failure walks from full rows:
+
+```sh
+cmake -S . -B build-python-no-fullrow-resolve \
+  -DBUILD_PYTHON_EXTENSION=ON \
+  -DENABLE_FAILURELESS_FULL_ROWS=OFF
+cmake --build build-python-no-fullrow-resolve
+```
+
+The build also supports a dense failureless cache for the first N compiled
+states. This can remove more failure transitions, but it adds
+`N * 256 * sizeof(state)` memory plus an offset table and should be benchmarked
+before use:
+
+```sh
+cmake -S . -B build-python-cache1024 \
+  -DBUILD_PYTHON_EXTENSION=ON \
+  -DFAILURELESS_CACHE_MAX_STATES=1024
+cmake --build build-python-cache1024
+```
+
+The Python `AhoCorasick` object provides `get_automaton_info()` to inspect
+state count, transition memory, total memory, and the compiled full-row
+threshold, as well as failureless full-row and dense-cache settings.
+
 For native search profiling, enable instrumentation counters in a profiling
 build:
 

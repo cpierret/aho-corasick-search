@@ -7,6 +7,21 @@ option(BUILD_PYTHON_EXTENSION "Build the native CPython extension" OFF)
 option(ENABLE_ASAN "Build with AddressSanitizer" OFF)
 option(ENABLE_COVERAGE "Build tests with code coverage instrumentation" OFF)
 option(ENABLE_SEARCH_STATS "Enable native search instrumentation counters" OFF)
+option(ENABLE_FAILURELESS_FULL_ROWS "Resolve full-row failure transitions at compile time" ON)
+set(FULL_ROW_MIN_TRANSITIONS 4 CACHE STRING "Minimum transition count that stores a non-root row in full format")
+set(FAILURELESS_CACHE_MAX_STATES 0 CACHE STRING "Maximum states with precomputed failureless transitions; 0 disables the cache")
+
+if("${FULL_ROW_MIN_TRANSITIONS}" MATCHES "^[0-9][0-9]*$")
+else()
+    message(FATAL_ERROR "FULL_ROW_MIN_TRANSITIONS must be an integer from 1 to 64")
+endif()
+if(FULL_ROW_MIN_TRANSITIONS LESS 1 OR FULL_ROW_MIN_TRANSITIONS GREATER 64)
+    message(FATAL_ERROR "FULL_ROW_MIN_TRANSITIONS must be an integer from 1 to 64")
+endif()
+if("${FAILURELESS_CACHE_MAX_STATES}" MATCHES "^[0-9][0-9]*$")
+else()
+    message(FATAL_ERROR "FAILURELESS_CACHE_MAX_STATES must be a non-negative integer")
+endif()
 
 set(ASAN_FLAGS -fsanitize=address -fno-omit-frame-pointer -g)
 set(COVERAGE_COMPILE_FLAGS --coverage -O0 -g)
@@ -54,6 +69,15 @@ target_include_directories(aho_corasick_search
 if(ENABLE_SEARCH_STATS)
     target_compile_definitions(aho_corasick_search PUBLIC AHO_CORASICK_SEARCH_STATS)
 endif()
+if(ENABLE_FAILURELESS_FULL_ROWS)
+    target_compile_definitions(aho_corasick_search PUBLIC AHO_CORASICK_FAILURELESS_FULL_ROWS=1)
+else()
+    target_compile_definitions(aho_corasick_search PUBLIC AHO_CORASICK_FAILURELESS_FULL_ROWS=0)
+endif()
+target_compile_definitions(aho_corasick_search PUBLIC
+    AHO_CORASICK_FULL_ROW_MIN_TRANSITIONS=${FULL_ROW_MIN_TRANSITIONS}
+    AHO_CORASICK_FAILURELESS_CACHE_MAX_STATES=${FAILURELESS_CACHE_MAX_STATES}
+)
 
 # Require C++17
 set_target_properties(aho_corasick_search PROPERTIES

@@ -73,6 +73,18 @@
 // define this to have more than 16 millions states
 #define BNFA_STATE_64BITS
 
+#ifndef AHO_CORASICK_FULL_ROW_MIN_TRANSITIONS
+#define AHO_CORASICK_FULL_ROW_MIN_TRANSITIONS 4
+#endif
+
+#ifndef AHO_CORASICK_FAILURELESS_CACHE_MAX_STATES
+#define AHO_CORASICK_FAILURELESS_CACHE_MAX_STATES 0
+#endif
+
+#ifndef AHO_CORASICK_FAILURELESS_FULL_ROWS
+#define AHO_CORASICK_FAILURELESS_FULL_ROWS 1
+#endif
+
 namespace textsearch {
 
 
@@ -115,6 +127,8 @@ public:
         uint64_t sparse_binary_hits = 0;
         uint64_t sparse_binary_misses = 0;
         uint64_t failure_transitions = 0;
+        uint64_t failureless_cache_hits = 0;
+        uint64_t failureless_cache_misses = 0;
         uint64_t match_state_checks = 0;
         uint64_t match_state_hits = 0;
         uint64_t match_candidates = 0;
@@ -169,7 +183,24 @@ public:
         bnfa_state_index_t sindex,
         bnfa_state_index_t* current_state);
 
-    int getPatternCount();
+    int getPatternCount() const;
+    bnfa_state_index_t getStateCount() const;
+    size_t getTransitionMemoryBytes() const;
+    size_t getFailurelessCacheMemoryBytes() const;
+    size_t getFailurelessCacheStateCount() const;
+    size_t getTotalMemoryBytes() const;
+    static constexpr unsigned getFullRowMinTransitions()
+    {
+        return BNFA_FULL_ROW_MIN_TRANSITIONS;
+    }
+    static constexpr size_t getFailurelessCacheMaxStates()
+    {
+        return BNFA_FAILURELESS_CACHE_MAX_STATES;
+    }
+    static constexpr bool hasFailurelessFullRows()
+    {
+        return BNFA_FAILURELESS_FULL_ROWS;
+    }
 
     void print(); /* prints the nfa states-verbose!! */
     void printInfo(); /* print info on this search engine */
@@ -225,6 +256,16 @@ private:
 
     static constexpr unsigned BNFA_SPARSE_LINEAR_SEARCH_LIMIT = 6;
     static constexpr unsigned BNFA_MAX_ALPHABET_SIZE = 256;
+    static constexpr unsigned BNFA_FULL_ROW_MIN_TRANSITIONS =
+        AHO_CORASICK_FULL_ROW_MIN_TRANSITIONS;
+    static constexpr size_t BNFA_FAILURELESS_CACHE_MAX_STATES =
+        AHO_CORASICK_FAILURELESS_CACHE_MAX_STATES;
+    static constexpr bool BNFA_FAILURELESS_FULL_ROWS =
+        AHO_CORASICK_FAILURELESS_FULL_ROWS != 0;
+    static_assert(
+        BNFA_FULL_ROW_MIN_TRANSITIONS >= 1 &&
+            BNFA_FULL_ROW_MIN_TRANSITIONS <= BNFA_SPARSE_MAX_ROW_TRANSITIONS + 1,
+        "AHO_CORASICK_FULL_ROW_MIN_TRANSITIONS must be between 1 and 64");
 
  
     /*
@@ -362,6 +403,8 @@ private:
     std::vector<bnfa_state_index_t> bnfaFailState;
 
     std::vector<bnfa_state_t> bnfaTransList;
+    std::vector<size_t> failureless_cache_offsets_;
+    std::vector<bnfa_state_index_t> failureless_transition_cache_;
     int                bnfaForceFullZeroState;
 
     std::vector<std::unique_ptr<bnfa_pattern_t>> pattern_storage_;
@@ -376,6 +419,7 @@ private:
     size_t 			   pat_memory;
     size_t 			   list_memory;
     size_t 			   nextstate_memory;
+    size_t             failureless_cache_memory;
     size_t 			   failstate_memory;
     size_t 			   matchlist_memory;
     character_functor toupper_functor;
@@ -408,6 +452,8 @@ private:
     int _bnfa_opt_nfa();
     int _bnfa_build_nfa();
     int _bnfa_conv_list_to_csparse_array();
+    int _resolve_full_row_failure_transitions();
+    int _build_failureless_transition_cache(const std::vector<bnfa_state_index_t>& state_indexes);
     void _reset_compiled_state();
     bnfa_trans_node_t* _make_transition_node();
     bnfa_match_node_t* _make_match_node();
@@ -425,9 +471,30 @@ private:
     static size_t _bnfa_conv_node_to_full(bnfa_trans_node_t* t, bnfa_state_t * full);
     
     static int KcontainsJ(bnfa_trans_node_t * tk, bnfa_trans_node_t *tj);
+
+    static inline bool shouldUseFullFormatForRow(
+        bnfa_state_index_t state,
+        unsigned transition_count,
+        int force_full_zero_state)
+    {
+        return (state == 0 && force_full_zero_state) ||
+            transition_count >= BNFA_FULL_ROW_MIN_TRANSITIONS ||
+            transition_count > BNFA_SPARSE_MAX_ROW_TRANSITIONS;
+    }
     
     static FORCE_INLINE bnfa_state_index_t _bnfa_get_next_state_csparse_nfa(
         bnfa_state_t * pcx,
+        bnfa_state_index_t sindex,
+        unsigned input
+#ifdef AHO_CORASICK_SEARCH_STATS
+        , SearchStats* stats
+#endif
+        );
+
+    static FORCE_INLINE bnfa_state_index_t _bnfa_get_next_state_failureless_nfa(
+        bnfa_state_t * pcx,
+        const size_t* failureless_cache_offsets,
+        const bnfa_state_index_t* failureless_transition_cache,
         bnfa_state_index_t sindex,
         unsigned input
 #ifdef AHO_CORASICK_SEARCH_STATS
@@ -612,6 +679,10 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator Tend,
 
     bnfa_match_node_t ** MatchList = bnfaMatchList.data();
     bnfa_state_t       * transList = bnfaTransList.data();
+#if AHO_CORASICK_FAILURELESS_CACHE_MAX_STATES > 0
+    const size_t* failureless_cache_offsets = failureless_cache_offsets_.data();
+    const bnfa_state_index_t* failureless_transition_cache = failureless_transition_cache_.data();
+#endif
     bnfa_state_index_t   last_sindex;
     unsigned int nfound = 0;
 
@@ -622,6 +693,18 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator Tend,
         last_sindex = sindex;
 
         /* Transition to next state index */
+#if AHO_CORASICK_FAILURELESS_CACHE_MAX_STATES > 0
+        sindex = _bnfa_get_next_state_failureless_nfa(
+            transList,
+            failureless_cache_offsets,
+            failureless_transition_cache,
+            sindex,
+            static_cast<unsigned char>(*T)
+#ifdef AHO_CORASICK_SEARCH_STATS
+            , &search_stats_
+#endif
+            );
+#else
         sindex = _bnfa_get_next_state_csparse_nfa(
             transList,
             sindex,
@@ -630,6 +713,7 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator Tend,
             , &search_stats_
 #endif
             );
+#endif
 
         /* Log matches in this state - if any */
 #ifdef AHO_CORASICK_SEARCH_STATS
@@ -696,6 +780,10 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_case(RAIterator begin, RAIterator Te
     bnfa_match_node_t ** MatchList = bnfaMatchList.data();
     bnfa_pattern_t     * patrn;
     bnfa_state_t       * transList = bnfaTransList.data();
+#if AHO_CORASICK_FAILURELESS_CACHE_MAX_STATES > 0
+    const size_t* failureless_cache_offsets = failureless_cache_offsets_.data();
+    const bnfa_state_index_t* failureless_transition_cache = failureless_transition_cache_.data();
+#endif
     unsigned             nfound = 0;
     bnfa_state_index_t             last_match = LAST_STATE_INIT;
     bnfa_state_index_t             last_match_saved = LAST_STATE_INIT;
@@ -704,6 +792,18 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_case(RAIterator begin, RAIterator Te
     for (; T<Tend; ++T)
     {
         /* Transition to next state index */
+#if AHO_CORASICK_FAILURELESS_CACHE_MAX_STATES > 0
+        sindex = _bnfa_get_next_state_failureless_nfa(
+            transList,
+            failureless_cache_offsets,
+            failureless_transition_cache,
+            sindex,
+            static_cast<unsigned char>(*T)
+#ifdef AHO_CORASICK_SEARCH_STATS
+            , &search_stats_
+#endif
+            );
+#else
         sindex = _bnfa_get_next_state_csparse_nfa(
             transList,
             sindex,
@@ -712,6 +812,7 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_case(RAIterator begin, RAIterator Te
             , &search_stats_
 #endif
             );
+#endif
 
         /* Log matches in this state - if any */
 #ifdef AHO_CORASICK_SEARCH_STATS
@@ -876,6 +977,26 @@ AhoCorasickSearch::_bnfa_get_next_state_csparse_nfa(
 #ifdef AHO_CORASICK_SEARCH_STATS
             ++stats->full_row_visits;
 #endif
+#if AHO_CORASICK_FAILURELESS_FULL_ROWS
+            bnfa_state_index_t idx = fullGetTransitionState(pcs[1 + input]);
+            if (sindex == 0)
+            {
+#ifdef AHO_CORASICK_SEARCH_STATS
+                ++stats->full_root_transitions;
+                if (idx == 0)
+                {
+                    ++stats->full_root_zero_transitions;
+                }
+#endif
+            }
+            else
+            {
+#ifdef AHO_CORASICK_SEARCH_STATS
+                ++stats->full_non_root_hits;
+#endif
+            }
+            return idx;
+#else
             if (sindex == 0)
             {
                 bnfa_state_index_t idx = fullGetTransitionState(pcs[1 + input]);
@@ -902,6 +1023,7 @@ AhoCorasickSearch::_bnfa_get_next_state_csparse_nfa(
                 ++stats->full_non_root_misses;
 #endif
             }
+#endif
         }
         else // Sparse
         {
@@ -965,6 +1087,43 @@ AhoCorasickSearch::_bnfa_get_next_state_csparse_nfa(
 #endif
         sindex = getFailureState(pcs[0]);
     }
+}
+
+FORCE_INLINE
+AhoCorasickSearch::bnfa_state_index_t
+AhoCorasickSearch::_bnfa_get_next_state_failureless_nfa(
+    bnfa_state_t * pcx,
+    const size_t* failureless_cache_offsets,
+    const bnfa_state_index_t* failureless_transition_cache,
+    bnfa_state_index_t sindex,
+    unsigned input
+#ifdef AHO_CORASICK_SEARCH_STATS
+    , SearchStats* stats
+#endif
+    )
+{
+    const size_t cache_offset = failureless_cache_offsets[sindex];
+    if (cache_offset != 0)
+    {
+#ifdef AHO_CORASICK_SEARCH_STATS
+        ++stats->transition_calls;
+        ++stats->state_visits;
+        ++stats->failureless_cache_hits;
+#endif
+        return failureless_transition_cache[cache_offset - 1 + input];
+    }
+
+#ifdef AHO_CORASICK_SEARCH_STATS
+    ++stats->failureless_cache_misses;
+#endif
+    return _bnfa_get_next_state_csparse_nfa(
+        pcx,
+        sindex,
+        input
+#ifdef AHO_CORASICK_SEARCH_STATS
+        , stats
+#endif
+        );
 }
 
 }

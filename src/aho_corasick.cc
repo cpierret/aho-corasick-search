@@ -592,9 +592,7 @@ AhoCorasickSearch::_bnfa_conv_list_to_csparse_array()
         }
 
         /* add in transition count */
-        if ((k == 0 && bnfaForceFullZeroState)
-            || nc > BNFA_SPARSE_MAX_ROW_TRANSITIONS
-            )
+        if (shouldUseFullFormatForRow(k, nc, bnfaForceFullZeroState))
         {
             nps += BNFA_MAX_ALPHABET_SIZE;
         }
@@ -653,8 +651,7 @@ AhoCorasickSearch::_bnfa_conv_list_to_csparse_array()
         }
 
         /* add a full state or a sparse state  */
-        if ((k == 0 && bnfaForceFullZeroState) ||
-            nc > BNFA_SPARSE_MAX_ROW_TRANSITIONS)
+        if (shouldUseFullFormatForRow(k, nc, bnfaForceFullZeroState))
         {
             // Full format
             /* set the control word */
@@ -772,6 +769,161 @@ AhoCorasickSearch::_bnfa_conv_list_to_csparse_array()
 
     bnfaTransList = std::move(transition_list);
     nextstate_memory = bnfaTransList.size() * sizeof(bnfa_state_t);
+
+#if AHO_CORASICK_FAILURELESS_FULL_ROWS
+    if (_resolve_full_row_failure_transitions() < 0)
+    {
+        return -1;
+    }
+#endif
+
+#if AHO_CORASICK_FAILURELESS_CACHE_MAX_STATES > 0
+    if (_build_failureless_transition_cache(state_indexes) < 0)
+    {
+        return -1;
+    }
+#else
+    failureless_cache_memory = 0;
+#endif
+
+    return 0;
+}
+
+int
+AhoCorasickSearch::_resolve_full_row_failure_transitions()
+{
+    if (bnfaTransList.empty())
+    {
+        return 0;
+    }
+
+    bnfa_state_t* ps = bnfaTransList.data();
+    bnfa_state_index_t ps_index = 0;
+#ifdef AHO_CORASICK_SEARCH_STATS
+    SearchStats build_stats;
+#endif
+
+    for (bnfa_state_index_t state = 0; state < bnfaNumStates; ++state)
+    {
+        if (ps_index >= bnfaTransList.size())
+        {
+            return -1;
+        }
+
+        ++ps_index; /* skip state id */
+        if (ps_index >= bnfaTransList.size())
+        {
+            return -1;
+        }
+
+        bnfa_state_t& control = ps[ps_index];
+        if (isFullFormat(control))
+        {
+            const bnfa_state_index_t failure_state = getFailureState(control);
+            ++ps_index;
+
+            if (ps_index + BNFA_MAX_ALPHABET_SIZE > bnfaTransList.size())
+            {
+                return -1;
+            }
+
+            if (state != 0)
+            {
+                for (unsigned input = 0; input < BNFA_MAX_ALPHABET_SIZE; ++input)
+                {
+                    bnfa_state_t& transition = ps[ps_index + input];
+                    if (fullGetTransitionState(transition) == 0)
+                    {
+                        const bnfa_state_index_t resolved_state =
+                            _bnfa_get_next_state_csparse_nfa(
+                                ps,
+                                failure_state,
+                                input
+#ifdef AHO_CORASICK_SEARCH_STATS
+                                , &build_stats
+#endif
+                                );
+                        transition = makeTransitionState(transition, resolved_state);
+                    }
+                }
+            }
+
+            ps_index += BNFA_MAX_ALPHABET_SIZE;
+        }
+        else
+        {
+            const unsigned nc = sparseGetNumberOfTransitions(control);
+            ++ps_index;
+            ps_index += nc;
+        }
+    }
+
+    return ps_index == bnfaTransList.size() ? 0 : -1;
+}
+
+int
+AhoCorasickSearch::_build_failureless_transition_cache(
+    const std::vector<bnfa_state_index_t>& state_indexes)
+{
+#if AHO_CORASICK_FAILURELESS_CACHE_MAX_STATES > 0
+    const size_t cache_state_count =
+        state_indexes.size() < BNFA_FAILURELESS_CACHE_MAX_STATES
+            ? state_indexes.size()
+            : BNFA_FAILURELESS_CACHE_MAX_STATES;
+
+    if (cache_state_count == 0)
+    {
+        failureless_cache_offsets_.clear();
+        failureless_transition_cache_.clear();
+        failureless_cache_memory = 0;
+        return 0;
+    }
+
+    try
+    {
+        failureless_cache_offsets_.assign(bnfaTransList.size(), 0);
+        failureless_transition_cache_.clear();
+        failureless_transition_cache_.reserve(cache_state_count * BNFA_MAX_ALPHABET_SIZE);
+
+        bnfa_state_t* transList = bnfaTransList.data();
+#ifdef AHO_CORASICK_SEARCH_STATS
+        SearchStats build_stats;
+#endif
+        for (size_t state = 0; state < cache_state_count; ++state)
+        {
+            const bnfa_state_index_t state_index = state_indexes[state];
+            if (state_index >= failureless_cache_offsets_.size())
+            {
+                return -1;
+            }
+
+            failureless_cache_offsets_[state_index] = failureless_transition_cache_.size() + 1;
+            for (unsigned input = 0; input < BNFA_MAX_ALPHABET_SIZE; ++input)
+            {
+                failureless_transition_cache_.push_back(
+                    _bnfa_get_next_state_csparse_nfa(
+                        transList,
+                        state_index,
+                        input
+#ifdef AHO_CORASICK_SEARCH_STATS
+                        , &build_stats
+#endif
+                        ));
+            }
+        }
+    }
+    catch (const std::bad_alloc&)
+    {
+        return -1;
+    }
+
+    failureless_cache_memory =
+        failureless_cache_offsets_.size() * sizeof(size_t) +
+        failureless_transition_cache_.size() * sizeof(bnfa_state_index_t);
+#else
+    (void)state_indexes;
+    failureless_cache_memory = 0;
+#endif
 
     return 0;
 }
@@ -906,6 +1058,7 @@ AhoCorasickSearch::AhoCorasickSearch(bnfa_case flag)
     pat_memory = 0;
     list_memory = 0;
     nextstate_memory = 0;
+    failureless_cache_memory = 0;
     failstate_memory = 0;
     matchlist_memory = 0;
     setCase(flag);
@@ -934,6 +1087,8 @@ AhoCorasickSearch::_reset_compiled_state()
     std::vector<std::unique_ptr<bnfa_match_node_t>>().swap(match_node_storage_);
     std::vector<bnfa_state_index_t>().swap(bnfaFailState);
     std::vector<bnfa_state_t>().swap(bnfaTransList);
+    std::vector<size_t>().swap(failureless_cache_offsets_);
+    std::vector<bnfa_state_index_t>().swap(failureless_transition_cache_);
     match_queue.clear();
 
     bnfaNumStates = 0;
@@ -944,6 +1099,7 @@ AhoCorasickSearch::_reset_compiled_state()
     matchlist_memory = 0;
     failstate_memory = 0;
     nextstate_memory = 0;
+    failureless_cache_memory = 0;
 }
 
 AhoCorasickSearch::bnfa_trans_node_t*
@@ -1115,9 +1271,41 @@ AhoCorasickSearch::_add_queue(bnfa_match_node_t * p, int pos)
 
 
 int
-AhoCorasickSearch::getPatternCount()
+AhoCorasickSearch::getPatternCount() const
 {
     return bnfaPatternCnt;
+}
+
+auto
+AhoCorasickSearch::getStateCount() const -> bnfa_state_index_t
+{
+    return bnfaNumStates;
+}
+
+size_t
+AhoCorasickSearch::getTransitionMemoryBytes() const
+{
+    return nextstate_memory;
+}
+
+size_t
+AhoCorasickSearch::getFailurelessCacheMemoryBytes() const
+{
+    return failureless_cache_memory;
+}
+
+size_t
+AhoCorasickSearch::getFailurelessCacheStateCount() const
+{
+    return failureless_transition_cache_.size() / BNFA_MAX_ALPHABET_SIZE;
+}
+
+size_t
+AhoCorasickSearch::getTotalMemoryBytes() const
+{
+    return bnfa_memory + pat_memory + list_memory +
+        matchlist_memory + failstate_memory + nextstate_memory +
+        failureless_cache_memory;
 }
 
 
@@ -1146,6 +1334,7 @@ void AhoCorasickSearch::printInfoEx(char * text)
         LogMessage("|   Patterns       :   %.2fK\n", (double)pat_memory / 1024);
         LogMessage("|   Match Lists    :   %.2fK\n", (double)matchlist_memory / 1024);
         LogMessage("|   Transitions    :   %.2fK\n", (double)nextstate_memory / 1024);
+        LogMessage("|   Failureless    :   %.2fK\n", (double)failureless_cache_memory / 1024);
     }
     else
     {
@@ -1157,6 +1346,8 @@ void AhoCorasickSearch::printInfoEx(char * text)
             static_cast<double>(matchlist_memory) / (1024 * 1024));
         LogMessage("|   Transitions    :   %.2fM\n",
             static_cast<double>(nextstate_memory) / (1024 * 1024));
+        LogMessage("|   Failureless    :   %.2fM\n",
+            static_cast<double>(failureless_cache_memory) / (1024 * 1024));
     }
     LogMessage("+-------------------------------------------------\n");
 }

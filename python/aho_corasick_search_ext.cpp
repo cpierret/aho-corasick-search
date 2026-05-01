@@ -154,6 +154,8 @@ nb::dict search_stats_to_dict(const textsearch::AhoCorasickSearch::SearchStats& 
     result["sparse_binary_hits"] = stats.sparse_binary_hits;
     result["sparse_binary_misses"] = stats.sparse_binary_misses;
     result["failure_transitions"] = stats.failure_transitions;
+    result["failureless_cache_hits"] = stats.failureless_cache_hits;
+    result["failureless_cache_misses"] = stats.failureless_cache_misses;
     result["match_state_checks"] = stats.match_state_checks;
     result["match_state_hits"] = stats.match_state_hits;
     result["match_candidates"] = stats.match_candidates;
@@ -254,6 +256,24 @@ public:
         return count;
     }
 
+    nb::dict get_automaton_info() const
+    {
+        nb::dict result;
+        result["pattern_count"] = search_.getPatternCount();
+        result["state_count"] = search_.getStateCount();
+        result["transition_memory_bytes"] = search_.getTransitionMemoryBytes();
+        result["failureless_cache_memory_bytes"] = search_.getFailurelessCacheMemoryBytes();
+        result["failureless_cache_state_count"] = search_.getFailurelessCacheStateCount();
+        result["total_memory_bytes"] = search_.getTotalMemoryBytes();
+        result["full_row_min_transitions"] =
+            textsearch::AhoCorasickSearch::getFullRowMinTransitions();
+        result["failureless_full_rows"] =
+            textsearch::AhoCorasickSearch::hasFailurelessFullRows();
+        result["failureless_cache_max_states"] =
+            textsearch::AhoCorasickSearch::getFailurelessCacheMaxStates();
+        return result;
+    }
+
 #ifdef AHO_CORASICK_SEARCH_STATS
     void reset_search_stats()
     {
@@ -295,6 +315,10 @@ NB_MODULE(aho_corasick_search_ext, module)
             &PyAhoCorasick::count_matches,
             "haystack"_a,
             "Return the number of matches without allocating match result tuples.")
+        .def(
+            "get_automaton_info",
+            &PyAhoCorasick::get_automaton_info,
+            "Return compiled automaton size and layout information.")
 #ifdef AHO_CORASICK_SEARCH_STATS
         .def(
             "reset_search_stats",
