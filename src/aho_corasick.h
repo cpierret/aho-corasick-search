@@ -46,10 +46,13 @@
 #include <limits.h>
 #include <stdint.h>
 #include <cstddef>
+#include <memory>
 #include <set>
 #include <algorithm>
 #include <any>
 #include <iterator>
+#include <new>
+#include <vector>
 
 
 #include "uppercase_iterator.h"
@@ -193,34 +196,37 @@ private:
     *   Internal Pattern Representation
     */
 
-    typedef struct bnfa_pattern	{
-        struct bnfa_pattern * next;
+    struct bnfa_pattern {
+        bnfa_pattern* next = nullptr;
 
-        unsigned char       * casepatrn;   /* case specific */
-        unsigned              n;           /* pattern len */
-        bool                  nocase;      /* nocase flag */
-        any_t userdata;    /* ptr to users pattern data/info  */
+        std::vector<unsigned char> casepatrn; /* case specific */
+        unsigned                   n = 0;     /* pattern len */
+        bool                       nocase = false; /* nocase flag */
+        any_t                      userdata;  /* ptr to users pattern data/info  */
 
-    } bnfa_pattern_t;
+    };
+    using bnfa_pattern_t = bnfa_pattern;
 
     /*
     *  List format transition node
     */
-    typedef struct bnfa_trans_node_s {
-        unsigned int               key; // 8 bit character
-        bnfa_state_index_t         next_state;
-        struct bnfa_trans_node_s * next;
+    struct bnfa_trans_node_s {
+        unsigned int       key = 0; // 8 bit character
+        bnfa_state_index_t next_state = 0;
+        bnfa_trans_node_s* next = nullptr;
 
-    } bnfa_trans_node_t;
+    };
+    using bnfa_trans_node_t = bnfa_trans_node_s;
 
     /*
     *  List format patterns
     */
-    typedef struct bnfa_match_node_s {
-        bnfa_pattern_t* data;
-        struct bnfa_match_node_s * next;
+    struct bnfa_match_node_s {
+        bnfa_pattern_t* data = nullptr;
+        bnfa_match_node_s* next = nullptr;
 
-    } bnfa_match_node_t;
+    };
+    using bnfa_match_node_t = bnfa_match_node_s;
 
     /*
     *  Final storage type for the state transitions
@@ -275,8 +281,8 @@ private:
                     return 0;
 
                 if (std::equal(
-                        pattern->casepatrn,
-                        pattern->casepatrn+pattern->n,
+                        pattern->casepatrn.data(),
+                        pattern->casepatrn.data() + pattern->n,
                         pattern_begin
                         )
                     )
@@ -309,19 +315,23 @@ private:
     unsigned           bnfaNumTrans;
     unsigned           bnfaMatchStates;
 
-    typedef struct bnfa_trans_table {
-        bnfa_state_t* states;                // zero state transitions
-        bnfa_trans_node_t** transitions;     // per state transition lists
-    } bnfa_trans_table_t;
+    struct bnfa_trans_table {
+        std::vector<bnfa_state_t> states;             // zero state transitions
+        std::vector<bnfa_trans_node_t*> transitions;  // per state transition lists
+    };
+    using bnfa_trans_table_t = bnfa_trans_table;
 
-    bnfa_trans_table_t* bnfaTransTable;
+    std::unique_ptr<bnfa_trans_table_t> bnfaTransTable;
 
-    bnfa_state_t       ** bnfaNextState;
-    bnfa_match_node_t  ** bnfaMatchList;
-    bnfa_state_index_t       * bnfaFailState;
+    std::vector<bnfa_match_node_t*> bnfaMatchList;
+    std::vector<bnfa_state_index_t> bnfaFailState;
 
-    bnfa_state_t       * bnfaTransList;
+    std::vector<bnfa_state_t> bnfaTransList;
     int                bnfaForceFullZeroState;
+
+    std::vector<std::unique_ptr<bnfa_pattern_t>> pattern_storage_;
+    std::vector<std::unique_ptr<bnfa_trans_node_t>> transition_node_storage_;
+    std::vector<std::unique_ptr<bnfa_match_node_t>> match_node_storage_;
 
     size_t 			   bnfa_memory;
     size_t 			   pat_memory;
@@ -359,6 +369,9 @@ private:
     int _bnfa_opt_nfa();
     int _bnfa_build_nfa();
     int _bnfa_conv_list_to_csparse_array();
+    void _reset_compiled_state();
+    bnfa_trans_node_t* _make_transition_node();
+    bnfa_match_node_t* _make_match_node();
     
     template <typename RAIteratorUnderlying,typename RAIterator>
     unsigned _bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator end,
@@ -458,16 +471,6 @@ private:
         }
         return -1;
     }
-    template <typename T>
-    static T* bnfa_alloc(size_t n, size_t& m, T*);
-    template <typename T>
-    static T* bnfa_alloc(size_t& m, T*);
-    template <typename T>
-    static void bnfa_free(T* p, size_t n, size_t& m);
-    template <typename T>
-    static void bnfa_free(T* p, size_t& m);
-
-
 };
 
 template<typename RAIterator>
@@ -551,8 +554,8 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator Tend,
     bnfa_match_node_t  * mlist;
     RAIterator T = begin;
 
-    bnfa_match_node_t ** MatchList = bnfaMatchList;
-    bnfa_state_t       * transList = bnfaTransList;
+    bnfa_match_node_t ** MatchList = bnfaMatchList.data();
+    bnfa_state_t       * transList = bnfaTransList.data();
     bnfa_state_index_t   last_sindex;
     unsigned int nfound = 0;
 
@@ -608,61 +611,6 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_q(RAIterator begin, RAIterator Tend,
 
 
 /*
-* Custom memory allocator
-*/
-template <typename T>
-/*static*/ 
-T* AhoCorasickSearch::bnfa_alloc(size_t n, size_t& m, T*)
-{
-    T* p;
-    if (n > 1)
-        p = new (std::nothrow) T[n]();
-    else
-        p = new (std::nothrow) T();
-    if (p)
-    {
-        m += n *sizeof(T);
-    }
-    return p;
-}
-
-template <typename T>
-/*static*/ 
-T* AhoCorasickSearch::bnfa_alloc(size_t& m, T*)
-{
-    T* p = new (std::nothrow) T();
-    if (p)
-    {
-        m += sizeof(T);
-    }
-    return p;
-}
-
-template <typename T>
-/*static*/ 
-void AhoCorasickSearch::bnfa_free(T* p, size_t n, size_t& m)
-{
-    if (p)
-    {
-        if (n > 1)
-            delete[] p;
-        else
-            delete p;
-        m -= n * sizeof(T);
-    }
-}
-template <typename T>
-/*static*/
-void AhoCorasickSearch::bnfa_free(T* p, size_t& m)
-{
-    if (p)
-    {
-        delete p;
-        m -= sizeof(T);
-    }
-}
-
-/*
 * Case specific search, global to all patterns
 */
 template<typename RAIteratorUnderlying, typename RAIterator>
@@ -673,9 +621,9 @@ AhoCorasickSearch::_bnfa_search_csparse_nfa_case(RAIterator begin, RAIterator Te
 {
     bnfa_match_node_t  * mlist;
     RAIterator T = begin;
-    bnfa_match_node_t ** MatchList = bnfaMatchList;
+    bnfa_match_node_t ** MatchList = bnfaMatchList.data();
     bnfa_pattern_t     * patrn;
-    bnfa_state_t       * transList = bnfaTransList;
+    bnfa_state_t       * transList = bnfaTransList.data();
     unsigned             nfound = 0;
     bnfa_state_index_t             last_match = LAST_STATE_INIT;
     bnfa_state_index_t             last_match_saved = LAST_STATE_INIT;
@@ -738,31 +686,31 @@ AhoCorasickSearch::addPattern(
     RAIterator patBegin, RAIterator patEnd, bool nocase,
     any_t userdata)
 {
-    bnfa_pattern_t * plist;
     if (patEnd <= patBegin || (patEnd - patBegin > UINT_MAX) )
         return -1;
     unsigned n = patEnd - patBegin;
 
-    plist = bnfa_alloc(1, pat_memory, (bnfa_pattern_t*)0); //NOLINT
-    if (!plist) return -1;
-
-    plist->casepatrn = bnfa_alloc(n, pat_memory, (unsigned char *)0); //NOLINT
-    if (!plist->casepatrn)
+    try
     {
-        bnfa_free(plist, pat_memory);
+        auto owned_pattern = std::make_unique<bnfa_pattern_t>();
+        bnfa_pattern_t* plist = owned_pattern.get();
+        plist->casepatrn.assign(patBegin, patEnd);
+        plist->n = n;
+        plist->nocase = nocase;
+        plist->userdata = userdata;
+
+        pattern_storage_.push_back(std::move(owned_pattern));
+
+        plist->next = bnfaPatterns; /* insert at front of list */
+        bnfaPatterns = plist;
+
+        pat_memory += sizeof(bnfa_pattern_t) + plist->casepatrn.size() * sizeof(unsigned char);
+        bnfaPatternCnt++;
+    }
+    catch (const std::bad_alloc&)
+    {
         return -1;
     }
-
-    std::copy(patBegin, patEnd, plist->casepatrn);
-
-    plist->n = n;
-    plist->nocase = nocase;
-    plist->userdata = userdata;
-
-    plist->next = bnfaPatterns; /* insert at front of list */
-    bnfaPatterns = plist;
-
-    bnfaPatternCnt++;
 
     return 0;
 }

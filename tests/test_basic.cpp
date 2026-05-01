@@ -199,5 +199,26 @@ int main() {
     assert(has_match(identified_matches, {2, 1}));
     assert(has_match(identified_matches, {3, 2}));
 
+    AhoCorasickSearch recompiled_search;
+    add_pattern(recompiled_search, "one", false, 1);
+    assert(recompiled_search.compile() == 0);
+    assert(recompiled_search.compile() == 0);
+    add_pattern(recompiled_search, "two", false, 2);
+    assert(recompiled_search.compile() == 0);
+
+    const std::string recompiled_text = "one two";
+    identified_matches.clear();
+    state = 0;
+    recompiled_search.search(
+        recompiled_text.begin(),
+        recompiled_text.end(),
+        collect_identified_match,
+        &identified_matches,
+        0,
+        &state);
+    assert(identified_matches.size() == 2);
+    assert(has_match(identified_matches, {1, 0}));
+    assert(has_match(identified_matches, {2, 4}));
+
     return 0;
 }

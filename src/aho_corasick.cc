@@ -172,11 +172,10 @@ AhoCorasickSearch::bnfa_state_index_t
 AhoCorasickSearch::_bnfa_list_get_next_state(bnfa_state_index_t state, unsigned char input) {
 
     if (state == 0) { /* Full (format) set of states  always */
-        bnfa_state_t * p = bnfaTransTable->states;
-        if (!p) {
+        if (bnfaTransTable->states.empty()) {
             return 0;
         }
-        return fullGetTransitionState(p[input]);
+        return fullGetTransitionState(bnfaTransTable->states[input]);
     } else {
         bnfa_trans_node_t* t = bnfaTransTable->transitions[state];
         while (t) {
@@ -207,22 +206,15 @@ AhoCorasickSearch::_bnfa_list_put_next_state(
     }
 
     if (state == 0) {
-        bnfa_state_t * p;
-
-        p = bnfaTransTable->states;
-        if (!p) {
-            p = bnfa_alloc(bnfaAlphabetSize, list_memory, (bnfa_state_t*)0); //NOLINT
-            if (!p) {
-                return -1;
-            }
-
-            bnfaTransTable->states = p;
+        if (bnfaTransTable->states.empty()) {
+            bnfaTransTable->states.assign(bnfaAlphabetSize, 0);
+            list_memory += bnfaTransTable->states.size() * sizeof(bnfa_state_t);
         }
-        if (p[input]!=0) {
-            p[input] = next_state;
+        if (bnfaTransTable->states[input]!=0) {
+            bnfaTransTable->states[input] = next_state;
             return 0;
         }
-        p[input] = next_state;
+        bnfaTransTable->states[input] = next_state;
     } else {
         bnfa_trans_node_t * p;
         bnfa_trans_node_t * tnew;
@@ -242,10 +234,7 @@ AhoCorasickSearch::_bnfa_list_put_next_state(
         }
 
         /* Definitely not an existing transition - add it */
-        tnew = bnfa_alloc(1, list_memory, (bnfa_trans_node_t*)0);//NOLINT
-        if (!tnew) {
-            return -1;
-        }
+        tnew = _make_transition_node();
 
         tnew->key = input;
         tnew->next_state = next_state;
@@ -263,30 +252,9 @@ AhoCorasickSearch::_bnfa_list_put_next_state(
 *   Free the entire transition list table
 */
 int AhoCorasickSearch::_bnfa_list_free_table() {
-    int i;
-    bnfa_trans_node_t * t, *p;
-
-    if (!bnfaTransTable) return 0;
-
-    if (bnfaTransTable->states) {
-        bnfa_free(bnfaTransTable->states, bnfaAlphabetSize, list_memory);
-    }
-
-    for (i = 1; i < bnfaMaxStates; i++) {
-        t = bnfaTransTable->transitions[i];
-
-        while (t) {
-            p = t;
-            t = t->next;
-            bnfa_free(p, list_memory);
-        }
-    }
-
-    if (bnfaTransTable) {
-        bnfa_free(bnfaTransTable->transitions, bnfaMaxStates, list_memory);
-        bnfa_free(bnfaTransTable, 1, list_memory);
-        bnfaTransTable = 0;
-    }
+    std::vector<std::unique_ptr<bnfa_trans_node_t>>().swap(transition_node_storage_);
+    bnfaTransTable.reset();
+    list_memory = 0;
 
     return 0;
 }
@@ -306,10 +274,10 @@ AhoCorasickSearch::_bnfa_list_conv_row_to_full(
     }
 
     if (state == 0) {
-        if (bnfaTransTable->states) {
+        if (!bnfaTransTable->states.empty()) {
             memcpy(
             full,
-            bnfaTransTable->states,
+            bnfaTransTable->states.data(),
             sizeof(bnfa_state_t)*bnfaAlphabetSize);
         } else {
             memset(full, 0, sizeof(bnfa_state_t)*bnfaAlphabetSize);
@@ -345,10 +313,10 @@ int
 AhoCorasickSearch::_bnfa_add_pattern_states(bnfa_pattern_t * p) {
     bnfa_state_index_t state, next;
     size_t  n;
-    unsigned char * pattern;
+    const unsigned char * pattern;
     bnfa_match_node_t  * pmn;
     n = p->n;
-    pattern = p->casepatrn;
+    pattern = p->casepatrn.data();
     state = 0;
 
     /*
@@ -397,11 +365,7 @@ AhoCorasickSearch::_bnfa_add_pattern_states(bnfa_pattern_t * p) {
     }
 
     /*  Add a pattern to the list of patterns terminated at this state */
-    pmn = bnfa_alloc(matchlist_memory, (bnfa_match_node_t*)0);
-    if (!pmn)
-    {
-        return -1;
-    }
+    pmn = _make_match_node();
 
     pmn->data = p;
     pmn->next = bnfaMatchList[state];
@@ -465,7 +429,7 @@ int AhoCorasickSearch::_bnfa_opt_nfa()
     int            cnt = 0;
     unsigned            k;
     bnfa_state_index_t fs, fr;
-    bnfa_state_index_t * FailState = bnfaFailState;
+    bnfa_state_index_t * FailState = bnfaFailState.data();
 
     for (k = 2; k < bnfaNumStates; k++)
     {
@@ -492,8 +456,8 @@ AhoCorasickSearch::_bnfa_build_nfa()
 {
     bnfa_state_index_t r,s;
     std::deque< bnfa_state_index_t > queue;
-    bnfa_state_index_t     * FailState = bnfaFailState;
-    bnfa_match_node_t ** MatchList = bnfaMatchList;
+    bnfa_state_index_t     * FailState = bnfaFailState.data();
+    bnfa_match_node_t ** MatchList = bnfaMatchList.data();
     bnfa_match_node_t  * mlist;
     bnfa_match_node_t  * px;
 
@@ -556,11 +520,7 @@ AhoCorasickSearch::_bnfa_build_nfa()
             for (mlist = MatchList[next]; mlist; mlist = mlist->next)
             {
                 /* Dup the node, don't copy the data */
-                px = bnfa_alloc(matchlist_memory, (bnfa_match_node_t*)0);
-                if (!px)
-                {
-                    return -1;
-                }
+                px = _make_match_node();
 
                 px->data = mlist->data;
 
@@ -601,7 +561,7 @@ AhoCorasickSearch::_bnfa_conv_list_to_csparse_array()
     unsigned            i;
     unsigned nc;
     bnfa_state_index_t      state;
-    bnfa_state_index_t    * FailState = bnfaFailState;
+    bnfa_state_index_t    * FailState = bnfaFailState.data();
     bnfa_state_t    * ps; /* transition list */
     bnfa_state_index_t    * pi; /* state indexes into ps */
     unsigned int      ps_index = 0;
@@ -658,27 +618,11 @@ AhoCorasickSearch::_bnfa_conv_list_to_csparse_array()
         return -1;
     }
 
-    /*
-    **  Alloc The Transition List -
-    **  we need an array of bnfa_state_t items of size 'nps'
-    */
-    ps = bnfa_alloc(nps, nextstate_memory, (bnfa_state_t*)0);
-    if (!ps)
-    {
-        /* Fatal */
-        return -1;
-    }
-    bnfaTransList = ps;
+    std::vector<bnfa_state_t> transition_list(nps);
+    ps = transition_list.data();
 
-    /*
-       State Index list for pi - we need an array of bnfa_state_index_t items of size 'NumStates'
-    */
-    pi = bnfa_alloc(bnfaNumStates, nextstate_memory, (bnfa_state_index_t*)0);
-    if (!pi)
-    {
-        /* Fatal */
-        return -1;
-    }
+    std::vector<bnfa_state_index_t> state_indexes(bnfaNumStates);
+    pi = state_indexes.data();
 
     /*
         Build the Transition List Array
@@ -826,7 +770,8 @@ AhoCorasickSearch::_bnfa_conv_list_to_csparse_array()
 
     }
 
-    bnfa_free(pi, bnfaNumStates, nextstate_memory);
+    bnfaTransList = std::move(transition_list);
+    nextstate_memory = bnfaTransList.size() * sizeof(bnfa_state_t);
 
     return 0;
 }
@@ -843,7 +788,7 @@ void AhoCorasickSearch::print()
     bnfa_state_t      * ps = 0;
 
 
-    MatchList = bnfaMatchList;
+    MatchList = bnfaMatchList.data();
 
     if (!bnfaNumStates)
         return;
@@ -852,7 +797,7 @@ void AhoCorasickSearch::print()
     {
         LogMessage("Print NFA-SPARSE state machine : %d active states\n",
             bnfaNumStates);
-        ps = bnfaTransList;
+        ps = bnfaTransList.data();
         if (!ps)
             return;
     }
@@ -928,7 +873,10 @@ void AhoCorasickSearch::print()
         {
             bnfa_pattern_t * pat;
             pat = (bnfa_pattern_t*)mlist->data;
-            LogMessage("---pattern : %.*s\n", pat->n, pat->casepatrn);
+            LogMessage(
+                "---pattern : %.*s\n",
+                static_cast<int>(pat->n),
+                reinterpret_cast<const char*>(pat->casepatrn.data()));
         }
     }
 }
@@ -945,11 +893,7 @@ AhoCorasickSearch::AhoCorasickSearch(bnfa_case flag)
     bnfaMaxStates = 0;
     bnfaNumTrans = 0;
     bnfaMatchStates = 0;
-    bnfaNextState = 0;
-    bnfaTransTable = 0;
-    bnfaMatchList = 0;
-    bnfaFailState = 0;
-    bnfaTransList = 0;
+    bnfaTransTable.reset();
 
     bnfaPatternCnt = 0;
     bnfaOptimizeFailureStates = false;
@@ -982,50 +926,47 @@ AhoCorasickSearch::setCase(bnfa_case flag)
     if (flag == bnfa_case::BNFA_NOCASE) bnfaCaseMode = flag;
 }
 
-/*
-*   Destructor
-*/
-AhoCorasickSearch::~AhoCorasickSearch()
+void
+AhoCorasickSearch::_reset_compiled_state()
 {
-    unsigned i;
-    bnfa_pattern_t * patrn, *ipatrn;
-    bnfa_match_node_t   * mlist, *ilist;
-
-    for (i = 0; bnfaMatchList && i < bnfaNumStates; i++)
-    {
-        /* free match list entries */
-        mlist = bnfaMatchList[i];
-
-        while (mlist)
-        {
-            ilist = mlist;
-            mlist = mlist->next;
-            bnfa_free(ilist, matchlist_memory);
-        }
-        bnfaMatchList[i] = 0;
-
-    }
-
     _bnfa_list_free_table();
+    std::vector<bnfa_match_node_t*>().swap(bnfaMatchList);
+    std::vector<std::unique_ptr<bnfa_match_node_t>>().swap(match_node_storage_);
+    std::vector<bnfa_state_index_t>().swap(bnfaFailState);
+    std::vector<bnfa_state_t>().swap(bnfaTransList);
+    match_queue.clear();
 
-    /* Free patterns */
-    patrn = bnfaPatterns;
-    while (patrn)
-    {
-        ipatrn = patrn;
-        patrn = patrn->next;
-        bnfa_free(ipatrn->casepatrn, ipatrn->n, pat_memory); //oops ??
-        bnfa_free(ipatrn, 1, pat_memory);
-    }
+    bnfaNumStates = 0;
+    bnfaMaxStates = 0;
+    bnfaNumTrans = 0;
+    bnfaMatchStates = 0;
 
-    /* Free arrays */
-    bnfa_free(bnfaFailState, bnfaNumStates, failstate_memory);
-    bnfa_free(bnfaMatchList, bnfaNumStates, matchlist_memory);
-    bnfa_free(bnfaNextState, bnfaNumStates, nextstate_memory);
-    bnfa_free(bnfaTransList, 
-        (2 * bnfaNumStates + bnfaNumTrans), 
-        nextstate_memory);
+    matchlist_memory = 0;
+    failstate_memory = 0;
+    nextstate_memory = 0;
 }
+
+AhoCorasickSearch::bnfa_trans_node_t*
+AhoCorasickSearch::_make_transition_node()
+{
+    auto node = std::make_unique<bnfa_trans_node_t>();
+    bnfa_trans_node_t* raw_node = node.get();
+    transition_node_storage_.push_back(std::move(node));
+    list_memory += sizeof(bnfa_trans_node_t);
+    return raw_node;
+}
+
+AhoCorasickSearch::bnfa_match_node_t*
+AhoCorasickSearch::_make_match_node()
+{
+    auto node = std::make_unique<bnfa_match_node_t>();
+    bnfa_match_node_t* raw_node = node.get();
+    match_node_storage_.push_back(std::move(node));
+    matchlist_memory += sizeof(bnfa_match_node_t);
+    return raw_node;
+}
+
+AhoCorasickSearch::~AhoCorasickSearch() = default;
 
 
 /*
@@ -1034,123 +975,106 @@ AhoCorasickSearch::~AhoCorasickSearch()
 int
 AhoCorasickSearch::compile()
 {
-    bnfa_pattern_t  * plist;
-    bnfa_match_node_t   ** tmpMatchList;
-    unsigned          cntMatchStates;
-    unsigned          i;
-
-    /* Count number of states */
-    for (plist = bnfaPatterns; plist != nullptr; plist = plist->next)
-    {
-        bnfaMaxStates += plist->n;
-    }
-    bnfaMaxStates++; /* one extra */
-
-    /* Alloc a List based State Transition table */
-    bnfaTransTable = bnfa_alloc(1, list_memory, (bnfa_trans_table_t*)0);
-    if (!bnfaTransTable)
-    {
+    auto fail = [this]() {
+        _reset_compiled_state();
         return -1;
-    }
-    bnfaTransTable->states = nullptr;
-    bnfaTransTable->transitions = bnfa_alloc(bnfaMaxStates, list_memory, (bnfa_trans_node_t**)0);
-    if (!bnfaTransTable->transitions)
-    {
-        bnfa_free(bnfaTransTable, 1, list_memory);
-        bnfaTransTable = nullptr;
-        return -1;
-    }
+    };
 
-    /*
-    ** Alloc a MatchList table -
-    ** this has a list of pattern matches for each state
-    */
-    bnfaMatchList = bnfa_alloc(
-        bnfaMaxStates,
-        matchlist_memory,
-        (bnfa_match_node_t**)0
-        );
-    if (!bnfaMatchList)
+    try
     {
-        return -1;
-    }
+        _reset_compiled_state();
 
-    /* Add each Pattern to the State Table - This forms a keyword trie using lists */
-    bnfaNumStates = 0;
-    for (plist = bnfaPatterns; plist != nullptr; plist = plist->next)
-    {
-        if (_bnfa_add_pattern_states(plist))
+        bnfa_pattern_t* plist;
+        unsigned cntMatchStates;
+        unsigned i;
+
+        /* Count number of states */
+        for (plist = bnfaPatterns; plist != nullptr; plist = plist->next)
         {
-            return -1;
+            bnfaMaxStates += plist->n;
         }
-    }
-    bnfaNumStates++; 
+        bnfaMaxStates++; /* one extra */
 
-    if (bnfaNumStates > BNFA_SPARSE_MAX_STATE)
-    {
-        return -1;  /* Call bnfaFree to clean up */
-    }
+        /* Alloc a List based State Transition table */
+        bnfaTransTable = std::make_unique<bnfa_trans_table_t>();
+        bnfaTransTable->transitions.assign(bnfaMaxStates, nullptr);
+        list_memory = sizeof(bnfa_trans_table_t) +
+            bnfaTransTable->transitions.size() * sizeof(bnfa_trans_node_t*);
 
-    /* ReAlloc a smaller MatchList table -  only need NumStates  */
-    tmpMatchList = bnfaMatchList;
+        /*
+        ** Alloc a MatchList table -
+        ** this has a list of pattern matches for each state
+        */
+        bnfaMatchList.assign(bnfaMaxStates, nullptr);
+        matchlist_memory = bnfaMatchList.size() * sizeof(bnfa_match_node_t*);
 
-    bnfa_match_node_t** resizedMatchList = bnfa_alloc(
-        bnfaNumStates,
-        matchlist_memory,
-        (bnfa_match_node_t**)0
-        );
-    if (!resizedMatchList)
-    {
-        return -1;
-    }
-
-    memcpy(resizedMatchList, tmpMatchList, sizeof(bnfa_match_node_t**) * bnfaNumStates);
-
-    bnfa_free(tmpMatchList, bnfaMaxStates, matchlist_memory);
-    bnfaMatchList = resizedMatchList;
-
-    /* Alloc a failure state table -  only need NumStates */
-    bnfaFailState = bnfa_alloc(bnfaNumStates, failstate_memory, (bnfa_state_index_t*)0);
-    if (!bnfaFailState)
-    {
-        return -1;
-    }
-
-    /* Build the nfa w/failure states - time the nfa construction */
-    if (_bnfa_build_nfa())
-    {
-        return -1;
-    }
-
-    /* Convert nfa storage format from list to full or sparse */
-    if (bnfaFormat == BNFA_SPARSE)
-    {
-        if (_bnfa_conv_list_to_csparse_array())
+        /* Add each Pattern to the State Table - This forms a keyword trie using lists */
+        bnfaNumStates = 0;
+        for (plist = bnfaPatterns; plist != nullptr; plist = plist->next)
         {
-            return -1;
+            if (_bnfa_add_pattern_states(plist))
+            {
+                return fail();
+            }
         }
-        bnfa_free(bnfaFailState, bnfaNumStates, failstate_memory);
-        bnfaFailState = 0;
+        bnfaNumStates++;
+
+        if (bnfaNumStates > BNFA_SPARSE_MAX_STATE)
+        {
+            return fail();
+        }
+
+        /* ReAlloc a smaller MatchList table -  only need NumStates  */
+        std::vector<bnfa_match_node_t*> resizedMatchList(bnfaNumStates);
+        std::copy_n(bnfaMatchList.begin(), bnfaNumStates, resizedMatchList.begin());
+        bnfaMatchList = std::move(resizedMatchList);
+        matchlist_memory = bnfaMatchList.size() * sizeof(bnfa_match_node_t*) +
+            match_node_storage_.size() * sizeof(bnfa_match_node_t);
+
+        /* Alloc a failure state table -  only need NumStates */
+        bnfaFailState.assign(bnfaNumStates, 0);
+        failstate_memory = bnfaFailState.size() * sizeof(bnfa_state_index_t);
+
+        /* Build the nfa w/failure states - time the nfa construction */
+        if (_bnfa_build_nfa())
+        {
+            return fail();
+        }
+
+        /* Convert nfa storage format from list to full or sparse */
+        if (bnfaFormat == BNFA_SPARSE)
+        {
+            if (_bnfa_conv_list_to_csparse_array())
+            {
+                return fail();
+            }
+            std::vector<bnfa_state_index_t>().swap(bnfaFailState);
+            failstate_memory = 0;
+        }
+        else
+        {
+            return fail();
+        }
+
+        /* Free up the Table Of Transition Lists */
+        _bnfa_list_free_table();
+
+        /* Count states with Pattern Matches */
+        cntMatchStates = 0;
+        for (i = 0; i < bnfaNumStates; i++)
+        {
+            if (bnfaMatchList[i])
+                cntMatchStates++;
+        }
+
+        bnfaMatchStates = cntMatchStates;
+
+        return 0;
     }
-    else
+    catch (const std::bad_alloc&)
     {
-        return -1;
+        return fail();
     }
-
-    /* Free up the Table Of Transition Lists */
-    _bnfa_list_free_table();
-
-    /* Count states with Pattern Matches */
-    cntMatchStates = 0;
-    for (i = 0; i < bnfaNumStates; i++)
-    {
-        if (bnfaMatchList[i])
-            cntMatchStates++;
-    }
-
-    bnfaMatchStates = cntMatchStates;
-
-    return 0;
 }
 
 /*
