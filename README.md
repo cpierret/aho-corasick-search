@@ -33,6 +33,110 @@ cmake --build . --target coverage
 
 The generated `gcov` reports are written to `build-coverage/coverage/`.
 
+## Python extension
+
+The project can also build a native CPython extension with
+[nanobind](https://nanobind.readthedocs.io/). This is intended for benchmark
+integration where Python callback overhead would hide the C++ search cost.
+
+Install nanobind into the Python environment used by CMake, then enable the
+extension target:
+
+```sh
+python3 -m pip install nanobind
+cmake -S . -B build-python -DBUILD_PYTHON_EXTENSION=ON -DBUILD_TESTS=ON
+cmake --build build-python
+ctest --test-dir build-python --output-on-failure
+```
+
+The extension module is written to the CMake build directory. For ad hoc use:
+
+```sh
+PYTHONPATH=build-python python3 - <<'PY'
+import aho_corasick_search_ext
+
+ac = aho_corasick_search_ext.AhoCorasick(["needle", "hay"])
+print(ac.find_matches_as_indexes("haystack needle"))
+print(ac.count_matches("haystack needle"))
+PY
+```
+
+The Python API reports byte offsets. This is the fastest path and matches the
+ASCII benchmark data used by `ahocorasick_rs`.
+
+By default, the root row and non-root rows with at least four outgoing
+transitions use full 256-entry storage. This favors search throughput over the
+most compact sparse layout. To tune the speed/memory tradeoff, set the minimum
+transition count for full rows:
+
+```sh
+cmake -S . -B build-python-full8 \
+  -DBUILD_PYTHON_EXTENSION=ON \
+  -DFULL_ROW_MIN_TRANSITIONS=8
+cmake --build build-python-full8
+```
+
+Use `FULL_ROW_MIN_TRANSITIONS=64` to restore the previous compact behavior,
+where only the root row and rows too large for sparse encoding use full
+storage.
+
+Full rows resolve failure transitions at compile time by default. This keeps
+the same transition-table size while avoiding failure walks from full rows:
+
+```sh
+cmake -S . -B build-python-no-fullrow-resolve \
+  -DBUILD_PYTHON_EXTENSION=ON \
+  -DENABLE_FAILURELESS_FULL_ROWS=OFF
+cmake --build build-python-no-fullrow-resolve
+```
+
+The build can also expand sparse rows with inherited failure transitions while
+keeping the rows sparse. This is disabled by default because it can reduce
+failure walks at the cost of longer linear sparse scans:
+
+```sh
+cmake -S . -B build-python-sparse-failureless \
+  -DBUILD_PYTHON_EXTENSION=ON \
+  -DSPARSE_FAILURELESS_MAX_TRANSITIONS=2
+cmake --build build-python-sparse-failureless
+```
+
+With the default `FULL_ROW_MIN_TRANSITIONS=4`, values above `3` have no
+additional effect for sparse rows; tune the full-row threshold separately if
+you want to test larger expanded rows.
+
+The build also supports a dense failureless cache for the first N compiled
+states. This can remove more failure transitions, but it adds
+`N * 256 * sizeof(state)` memory plus an offset table and should be benchmarked
+before use:
+
+```sh
+cmake -S . -B build-python-cache1024 \
+  -DBUILD_PYTHON_EXTENSION=ON \
+  -DFAILURELESS_CACHE_MAX_STATES=1024
+cmake --build build-python-cache1024
+```
+
+The Python `AhoCorasick` object provides `get_automaton_info()` to inspect
+state count, transition memory, total memory, and the compiled full-row
+threshold, as well as failureless full-row, sparse-expansion, and dense-cache
+settings.
+
+For native search profiling, enable instrumentation counters in a profiling
+build:
+
+```sh
+cmake -S . -B build-python-stats \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DBUILD_PYTHON_EXTENSION=ON \
+  -DENABLE_SEARCH_STATS=ON
+cmake --build build-python-stats
+```
+
+When built with `ENABLE_SEARCH_STATS=ON`, the Python `AhoCorasick` object also
+provides `reset_search_stats()` and `get_search_stats()` for inspecting sparse
+NFA transition behavior.
+
 ## Usage example
 
 ```cpp

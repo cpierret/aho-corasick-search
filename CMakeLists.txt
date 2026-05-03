@@ -3,8 +3,33 @@ project(AhoCorasickSearch LANGUAGES CXX)
 
 option(BUILD_EXAMPLES "Build example binaries" OFF)
 option(BUILD_TESTS "Build tests" OFF)
+option(BUILD_PYTHON_EXTENSION "Build the native CPython extension" OFF)
 option(ENABLE_ASAN "Build with AddressSanitizer" OFF)
 option(ENABLE_COVERAGE "Build tests with code coverage instrumentation" OFF)
+option(ENABLE_SEARCH_STATS "Enable native search instrumentation counters" OFF)
+option(ENABLE_FAILURELESS_FULL_ROWS "Resolve full-row failure transitions at compile time" ON)
+set(FULL_ROW_MIN_TRANSITIONS 4 CACHE STRING "Minimum transition count that stores a non-root row in full format")
+set(SPARSE_FAILURELESS_MAX_TRANSITIONS 0 CACHE STRING "Maximum sparse-row transition count after failureless expansion; 0 disables expansion")
+set(FAILURELESS_CACHE_MAX_STATES 0 CACHE STRING "Maximum states with precomputed failureless transitions; 0 disables the cache")
+
+if("${FULL_ROW_MIN_TRANSITIONS}" MATCHES "^[0-9][0-9]*$")
+else()
+    message(FATAL_ERROR "FULL_ROW_MIN_TRANSITIONS must be an integer from 1 to 64")
+endif()
+if(FULL_ROW_MIN_TRANSITIONS LESS 1 OR FULL_ROW_MIN_TRANSITIONS GREATER 64)
+    message(FATAL_ERROR "FULL_ROW_MIN_TRANSITIONS must be an integer from 1 to 64")
+endif()
+if("${SPARSE_FAILURELESS_MAX_TRANSITIONS}" MATCHES "^[0-9][0-9]*$")
+else()
+    message(FATAL_ERROR "SPARSE_FAILURELESS_MAX_TRANSITIONS must be an integer from 0 to 63")
+endif()
+if(SPARSE_FAILURELESS_MAX_TRANSITIONS GREATER 63)
+    message(FATAL_ERROR "SPARSE_FAILURELESS_MAX_TRANSITIONS must be an integer from 0 to 63")
+endif()
+if("${FAILURELESS_CACHE_MAX_STATES}" MATCHES "^[0-9][0-9]*$")
+else()
+    message(FATAL_ERROR "FAILURELESS_CACHE_MAX_STATES must be a non-negative integer")
+endif()
 
 set(ASAN_FLAGS -fsanitize=address -fno-omit-frame-pointer -g)
 set(COVERAGE_COMPILE_FLAGS --coverage -O0 -g)
@@ -49,6 +74,20 @@ target_include_directories(aho_corasick_search
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
 )
 
+if(ENABLE_SEARCH_STATS)
+    target_compile_definitions(aho_corasick_search PUBLIC AHO_CORASICK_SEARCH_STATS)
+endif()
+if(ENABLE_FAILURELESS_FULL_ROWS)
+    target_compile_definitions(aho_corasick_search PUBLIC AHO_CORASICK_FAILURELESS_FULL_ROWS=1)
+else()
+    target_compile_definitions(aho_corasick_search PUBLIC AHO_CORASICK_FAILURELESS_FULL_ROWS=0)
+endif()
+target_compile_definitions(aho_corasick_search PUBLIC
+    AHO_CORASICK_FULL_ROW_MIN_TRANSITIONS=${FULL_ROW_MIN_TRANSITIONS}
+    AHO_CORASICK_SPARSE_FAILURELESS_MAX_TRANSITIONS=${SPARSE_FAILURELESS_MAX_TRANSITIONS}
+    AHO_CORASICK_FAILURELESS_CACHE_MAX_STATES=${FAILURELESS_CACHE_MAX_STATES}
+)
+
 # Require C++17
 set_target_properties(aho_corasick_search PROPERTIES
     CXX_STANDARD 17
@@ -61,6 +100,40 @@ if(BUILD_EXAMPLES)
     target_link_libraries(example aho_corasick_search)
     enable_asan_for(example)
     enable_coverage_for(example)
+endif()
+
+if(BUILD_PYTHON_EXTENSION)
+    if(CMAKE_VERSION VERSION_LESS 3.15)
+        message(FATAL_ERROR "BUILD_PYTHON_EXTENSION requires CMake 3.15 or newer")
+    endif()
+
+    find_package(Python 3.10 COMPONENTS Interpreter Development.Module REQUIRED)
+
+    execute_process(
+        COMMAND ${Python_EXECUTABLE} -m nanobind --cmake_dir
+        OUTPUT_VARIABLE NANOBIND_CMAKE_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        RESULT_VARIABLE NANOBIND_CMAKE_DIR_RESULT
+    )
+    if(NOT NANOBIND_CMAKE_DIR_RESULT EQUAL 0)
+        message(FATAL_ERROR "BUILD_PYTHON_EXTENSION requires nanobind. Install it with: ${Python_EXECUTABLE} -m pip install nanobind")
+    endif()
+
+    list(APPEND CMAKE_PREFIX_PATH "${NANOBIND_CMAKE_DIR}")
+    find_package(nanobind CONFIG REQUIRED)
+
+    nanobind_add_module(aho_corasick_search_ext
+        NOMINSIZE
+        python/aho_corasick_search_ext.cpp
+    )
+    target_link_libraries(aho_corasick_search_ext PRIVATE aho_corasick_search)
+    target_compile_features(aho_corasick_search_ext PRIVATE cxx_std_17)
+    set_target_properties(aho_corasick_search_ext PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
 endif()
 
 if(BUILD_TESTS)
@@ -93,6 +166,16 @@ if(BUILD_TESTS)
             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
             DEPENDS test_basic
             COMMENT "Running unit tests and generating gcov coverage reports"
+        )
+    endif()
+
+    if(BUILD_PYTHON_EXTENSION)
+        add_test(
+            NAME python_extension
+            COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_python_extension.py
+        )
+        set_tests_properties(python_extension PROPERTIES
+            ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:aho_corasick_search_ext>"
         )
     endif()
 endif()
